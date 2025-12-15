@@ -1,0 +1,1285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SANKET - QC Mode (Integrated)</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Roboto', sans-serif; overflow: hidden; background: #1a1a1a; }
+        #map { height: 100vh; width: 100vw; z-index: 1; background: #202020; }
+        
+        /* --- UI PANEL --- */
+        .controls {
+            position: absolute; top: 20px; left: 20px; 
+            background: rgba(20, 20, 20, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            z-index: 1000; 
+            border-radius: 12px; 
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            width: 320px;
+            color: #fff;
+            max-height: 90vh; 
+            overflow-y: auto;
+        }
+        
+        h3 { margin-top: 0; color: #4db8ff; font-weight: 700; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+        .section { margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
+        
+        label { font-weight: 500; font-size: 13px; display: block; margin-bottom: 5px; color: #ddd; }
+        input[type="file"], select, input[type="text"] { width: 100%; margin-top: 5px; font-size: 12px; color: #fff; background: #333; border: 1px solid #555; padding: 5px; border-radius: 4px; box-sizing: border-box; }
+        
+        button {
+            width: 100%; background: #00ff88; color: #000; border: none; padding: 10px; 
+            font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 10px;
+            transition: background 0.2s;
+        }
+        button:hover { background: #00cc6a; }
+        
+        .btn-secondary { background: #4db8ff; color: #000; margin-top: 5px; }
+        .btn-secondary:hover { background: #3399cc; }
+        .btn-purple { background: #9933ff; color: #fff; margin-top: 5px; }
+        .btn-snap { background: #ff55aa; color: #fff; margin-top: 5px; }
+        .btn-print { background: #ffaa00; color: #000; margin-top: 15px; }
+        .btn-warn { background: #ff3333; color: #fff; margin-top: 5px; }
+        .btn-caution { background: #ffaa00; color: #000; margin-top: 5px; } /* Caution Button */
+        .btn-save { background: #444; color: #fff; border: 1px solid #777; width: 48%; }
+
+        /* MODAL */
+        .modal {
+            display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; 
+            background-color: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+        }
+        .modal-content {
+            background-color: #2a2a2a; margin: 2% auto; padding: 20px; border: 1px solid #555; 
+            width: 95%; height: 90%; border-radius: 10px; position: relative; color: #fff;
+            overflow: hidden; display: flex; flex-direction: column;
+        }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close:hover { color: #fff; }
+        
+        .dashboard-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+        .dashboard-table th, .dashboard-table td { border: 1px solid #555; padding: 10px; text-align: center; }
+        .dashboard-table th { background-color: #444; color: #4db8ff; }
+        .dashboard-table tr:nth-child(even) { background-color: #333; }
+        .dashboard-table tr:hover { background-color: #444; }
+
+        .report-card { background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 6px; margin-top: 10px; font-size: 13px; }
+        .report-item { display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .status-pass { color: #00ff88; font-weight: bold; }
+        .status-fail { color: #ff3333; font-weight: bold; }
+
+        .legend div { margin-bottom: 6px; display: flex; align-items: center; font-size: 12px; }
+        .dot { height: 10px; width: 10px; display: inline-block; border-radius: 50%; margin-right: 8px; }
+        .line-segment { width: 25px; height: 4px; display: inline-block; margin-right: 8px; border-radius: 2px; }
+        
+        #status { font-weight: bold; font-size: 13px; color: #bbb; margin-top: 5px; }
+        
+        .leaflet-popup-content-wrapper { background: rgba(30, 30, 30, 0.98); color: #fff; border: 1px solid #444; padding: 0; }
+        .leaflet-popup-content { margin: 10px; width: 340px !important; }
+        .leaflet-popup-tip { background: rgba(30, 30, 30, 0.98); }
+        .graph-container { width: 320px; height: 220px; }
+        .modal-graph-container { width: 100%; flex-grow: 1; position: relative; cursor: grab; }
+        
+        /* --- CREW MODAL SPECIFIC --- */
+        .crew-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px; }
+        .crew-box { border: 1px solid #555; padding: 15px; border-radius: 8px; background: #333; }
+        .crew-box h4 { margin-top: 0; color: #ffd700; border-bottom: 1px solid #666; padding-bottom: 5px; }
+        .form-group { margin-bottom: 10px; }
+        .form-group label { color: #aaa; margin-bottom: 2px; }
+        .form-group input { width: 100%; background: #222; border: 1px solid #444; color: #fff; padding: 6px; }
+        .form-group input:focus { border-color: #00ff88; outline: none; }
+
+        /* --- PDF REPORT STYLES --- */
+        #printableReport { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: white; color: black; z-index: 100000; overflow-y: auto; font-family: 'Times New Roman', serif; 
+        }
+        .report-content-wrapper { width: 210mm; min-height: 297mm; margin: 0 auto; background: white; padding: 10mm; box-sizing: border-box; }
+        .page-break { page-break-before: always; margin-top: 20px; display: block; clear: both; }
+        .report-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 15px; }
+        .report-header h1 { margin: 0; font-size: 20px; text-transform: uppercase; }
+        .report-header h3 { color: #333; margin: 5px 0; font-size: 14px; border: none; }
+        .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+        .report-box { border: 1px solid #999; padding: 8px; }
+        .report-box h4 { margin-top: 0; background: #eee; padding: 4px; border-bottom: 1px solid #999; font-size: 13px; }
+        .report-box table { font-size: 14px; width: 100%; border-collapse: collapse; } 
+        
+        /* Crew Table in PDF */
+        .crew-report-table td { padding: 4px; border: 1px solid #ccc; font-size: 12px; }
+        .crew-report-table th { padding: 4px; border: 1px solid #ccc; background: #f0f0f0; font-size: 12px; font-weight: bold; text-align: left; }
+
+        table.report-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px; table-layout: fixed; }
+        table.report-table th, table.report-table td { border: 1px solid #999; padding: 4px; text-align: center; vertical-align: middle; white-space: normal; word-wrap: break-word; overflow-wrap: break-word; }
+        table.report-table th { background: #ddd; font-weight: bold; font-size: 12px; }
+        .col-small { width: 8%; } .col-time { width: 12%; } .col-med { width: 14%; } .col-speed { width: 12%; }
+        .pass-badge { background: #ccffcc; color: #006600; padding: 2px 5px; border-radius: 4px; font-weight: bold; }
+        .fail-badge { background: #ffcccc; color: #990000; padding: 2px 5px; border-radius: 4px; font-weight: bold; }
+        .graph-page-container { width: 100%; height: 900px; position: relative; display: flex; align-items: center; justify-content: center; }
+        .report-chart-box { width: 800px; height: 550px; border: 1px solid #ccc; padding: 10px; transform: rotate(90deg); transform-origin: center; }
+        
+        .snapshot-page-container { 
+            display: flex; flex-direction: column; justify-content: flex-start; 
+            height: 980px; width: 100%; page-break-after: always; padding: 10px 0; box-sizing: border-box;
+        }
+        .snapshot-heading { flex-shrink: 0; text-align: center; margin: 0 0 15px 0; padding-bottom: 5px; border-bottom: 2px solid #444; }
+        .snapshot-item { border: 1px solid #ccc; padding: 4px; display: flex; flex-direction: column; flex-grow: 1; margin-bottom: 15px; box-sizing: border-box; background: #fff; overflow: hidden; }
+        .snapshot-item:last-child { margin-bottom: 0; }
+        .snapshot-img-box { flex-grow: 1; height: 0; min-height: 100px; overflow: hidden; border-bottom: 1px solid #eee; display: flex; justify-content: center; align-items: center; background: #f9f9f9; }
+        .snapshot-img-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .snapshot-comment { padding: 5px; font-size: 12px; background: #f0f0f0; font-weight: bold; color: #000; flex-shrink: 0; border-top: 1px solid #ddd; }
+        
+        .graph-tools { text-align: right; padding-bottom: 10px; border-bottom: 1px solid #444; margin-bottom: 10px; }
+        .graph-tools button { width: auto; padding: 5px 15px; margin: 0 5px; font-size: 12px; }
+
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <h3>🚆 SANKET - QC Mode</h3>
+        
+        <div class="section" style="border-top: 1px solid #555; padding-top: 10px; margin-bottom: 10px;">
+            <label style="color: #ffd700;">📂 Project Share</label>
+            <div style="display:flex; gap: 5px;">
+                <button onclick="saveProject()" class="btn-save">💾 Save</button>
+                <button onclick="document.getElementById('projectUpload').click()" class="btn-save">📂 Open</button>
+            </div>
+            <input type="file" id="projectUpload" accept=".json, .sanket" style="display:none;" onchange="loadProject(this)" />
+        </div>
+
+        <div class="section">
+            <label>1. Train Type (For BPT & Caution)</label>
+            <select id="trainType">
+                <option value="GOODS">Goods Train (40-50 Kmph)</option>
+                <option value="COACHING">Coaching / MEMU (60-70 Kmph)</option>
+            </select>
+        </div>
+
+        <div class="section">
+            <label>2a. Upload Signals (Ref)</label>
+            <input type="file" id="signalUpload" accept=".xlsx, .xls" />
+            <div id="signalStatus" style="font-size:11px; color:#bbb;">Waiting...</div>
+        </div>
+
+        <div class="section">
+            <label>2b. Upload Mast Data (Lat/Long)</label>
+            <input type="file" id="mastUpload" accept=".xlsx, .csv" />
+            <div id="mastStatus" style="font-size:11px; color:#bbb;">Waiting...</div>
+        </div>
+
+        <div class="section">
+            <label>2c. Upload Caution Order (CD)</label>
+            <input type="file" id="cdUpload" accept=".xlsx, .csv" />
+            <div id="cdStatus" style="font-size:11px; color:#bbb;">Waiting...</div>
+        </div>
+        <div class="section">
+            <label>3. Upload Train Log (Data)</label>
+            <input type="file" id="logUpload" accept=".xlsx, .xls" />
+        </div>
+
+        <div class="section" id="stationSelectDiv" style="display:none;">
+            <label>From Station:</label>
+            <select id="fromStation"></select>
+            <label style="margin-top:10px;">To Station:</label>
+            <select id="toStation"></select>
+            <button onclick="filterAndPlot()">Show Route</button>
+        </div>
+        
+        <div id="analysisButtons" style="display:none; border-top: 1px solid #444; padding-top:10px;">
+            <label>Map Tools:</label>
+            <button class="btn-snap" id="snapBtn" onclick="captureSnapshot()">📸 Add Map View to Report</button>
+            <div id="snapCount" style="font-size:11px; text-align:right; color:#bbb; margin-bottom:10px;">Snapshots taken: 0</div>
+
+            <label>Advanced Analysis:</label>
+            <button class="btn-secondary" onclick="showAggregateGraph()">📊 Compare All Stops</button>
+            <button class="btn-secondary" onclick="showStoppageTable()">📋 Stoppage Analysis Details</button>
+            <button class="btn-caution" onclick="showCautionModal()">🚧 Caution Order Details</button>
+            <button class="btn-purple" onclick="showFullJourneyGraph()">📈 Speed vs Dist (Full Journey)</button>
+            
+            <label style="margin-top:10px; color:#ff3333;">Overspeed Analysis:</label>
+            <div style="display:flex; gap:5px;">
+                <select id="mpsSelect" style="margin-top:0;">
+                    <option value="130">130 Kmph</option>
+                    <option value="110">110 Kmph</option>
+                    <option value="100">100 Kmph</option>
+                    <option value="75">75 Kmph</option>
+                    <option value="60">60 Kmph</option>
+                    <option value="30">30 Kmph</option>
+                </select>
+                <button class="btn-warn" style="margin-top:0;" onclick="checkOverspeed()">⚠️ Check</button>
+            </div>
+            
+            <button class="btn-print" id="printBtn" onclick="openCrewModal()">🖨️ Generate PDF Report</button>
+        </div>
+
+        <div id="testReport" class="report-card" style="display:none;">
+            <div class="report-item">
+                <span>Brake Feel Test:</span>
+                <span id="bftStatus" class="status-fail">Waiting...</span>
+            </div>
+            <div class="report-item">
+                <span>Brake Power Test:</span>
+                <span id="bptStatus" class="status-fail">Waiting...</span>
+            </div>
+        </div>
+
+        <div id="status" style="margin-top:10px;">Waiting...</div>
+
+        <div class="legend" style="margin-top:15px;">
+            <div><span class="dot" style="background:#00ff00;"></span> Start</div>
+            <div><span class="dot" style="background:#ff0000;"></span> End</div>
+            <div><span class="dot" style="background:#4db8ff;"></span> Train Stop</div>
+            <div><span class="dot" style="background:#ffaa00;"></span> Signal</div>
+            <div><span class="line-segment" style="background:#FFFF00;"></span> Brake Feel Path</div>
+            <div><span class="line-segment" style="background:#9933ff;"></span> Brake Power Path</div>
+            <div><span class="line-segment" style="background:#00FFFF; box-shadow:0 0 5px #00FFFF;"></span> Overspeed (>MPS)</div>
+            <div><span class="line-segment" style="background:#ffaa00;"></span> Caution (Complied)</div>
+            <div><span class="line-segment" style="background:#ff0000; border: 1px dashed white;"></span> Caution (Violation)</div>
+        </div>
+    </div>
+
+    <div id="cautionModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('cautionModal')">&times;</span>
+            <h2 style="color:#ffaa00; margin-top:0;">🚧 Caution Order (SR) Details</h2>
+            <div style="overflow-x:auto;">
+                <table class="dashboard-table" id="cautionTable">
+                    <thead>
+                        <tr>
+                            <th>Zone (Mast to Mast)</th>
+                            <th>Time</th>
+                            <th>Limit (Kmph)</th>
+                            <th>Actual Max (Kmph)</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="crewModal" class="modal">
+        <div class="modal-content" style="height: auto; max-height: 90%; overflow-y: auto;">
+            <span class="close" onclick="closeModal('crewModal')">&times;</span>
+            <h2 style="color:#00ff88; margin-top:0; border-bottom:1px solid #555; padding-bottom:10px;">📋 Report Configuration & Crew Details</h2>
+            
+            <div style="background:#444; padding:10px; margin-bottom:15px; border-radius:5px;">
+                <h4 style="margin:0 0 10px 0; color:#fff;">🚂 Train Details</h4>
+                <div style="display:flex; gap:20px;">
+                    <div class="form-group" style="flex:1;"><label>Train No:</label><input type="text" id="inTrainNo" placeholder="e.g. 12345"></div>
+                    <div class="form-group" style="flex:1;"><label>Loco No:</label><input type="text" id="inLocoNo" placeholder="e.g. 30567"></div>
+                </div>
+            </div>
+
+            <div class="crew-grid">
+                <div class="crew-box">
+                    <h4>👮 Loco Pilot (LP)</h4>
+                    <div class="form-group">
+                        <label>LP ID (Auto-Fetch):</label>
+                        <input type="text" id="inLpId" placeholder="Enter ID (e.g. BSP123)" oninput="this.value = this.value.toUpperCase(); searchCrew(this.value, 'LP')">
+                    </div>
+                    <div class="form-group"><label>Name:</label><input type="text" id="inLpName"></div>
+                    <div class="form-group"><label>Designation:</label><input type="text" id="inLpDesg"></div>
+                    <div class="form-group"><label>Group CLI:</label><input type="text" id="inLpCli"></div>
+                    <div class="form-group"><label>CUG Number:</label><input type="text" id="inLpCug"></div>
+                </div>
+
+                <div class="crew-box">
+                    <h4>👮 Assistant LP (ALP)</h4>
+                    <div class="form-group">
+                        <label>ALP ID (Auto-Fetch):</label>
+                        <input type="text" id="inAlpId" placeholder="Enter ID" oninput="this.value = this.value.toUpperCase(); searchCrew(this.value, 'ALP')">
+                    </div>
+                    <div class="form-group"><label>Name:</label><input type="text" id="inAlpName"></div>
+                    <div class="form-group"><label>Designation:</label><input type="text" id="inAlpDesg"></div>
+                    <div class="form-group"><label>Group CLI:</label><input type="text" id="inAlpCli"></div>
+                    <div class="form-group"><label>CUG Number:</label><input type="text" id="inAlpCug"></div>
+                </div>
+            </div>
+
+            <button onclick="finalizeReport()" style="background:#00ff88; color:#000; font-size:16px; padding:15px;">✅ Generate Final PDF Report</button>
+            <div id="sheetStatus" style="color:#aaa; text-align:center; margin-top:10px; font-size:12px;">Google Sheet Status: Waiting...</div>
+        </div>
+    </div>
+
+    <div id="chartModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('chartModal')">&times;</span>
+            <h2 style="color:#fff; margin-top:0;">🛑 All Stoppage Braking Patterns</h2>
+            <div class="modal-graph-container">
+                <canvas id="allStopsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="fullGraphModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('fullGraphModal')">&times;</span>
+            <h2 style="color:#9933ff; margin-top:0;">📈 Full Journey Analysis (Speed vs Distance)</h2>
+            <div class="graph-tools">
+                <span style="color:#bbb; margin-right:10px; font-size:12px;">🖱️ Mouse Wheel to Zoom | Left Click & Drag to Pan</span>
+                <button onclick="resetFullGraphZoom()" style="background:#444; color:#fff;">🔄 Reset Zoom</button>
+            </div>
+            <div class="modal-graph-container">
+                <canvas id="fullJourneyChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="tableModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('tableModal')">&times;</span>
+            <h2 style="color:#4db8ff; margin-top:0;">📋 Stoppage Analysis Details</h2>
+            <div style="overflow-x:auto;">
+                <table class="dashboard-table" id="dashboardTable">
+                    <thead>
+                        <tr>
+                            <th rowspan="2">Stop # / Signal</th>
+                            <th rowspan="2">Time</th>
+                            <th colspan="2">Speed at Prev Signals (Kmph)</th>
+                            <th colspan="4">Speed at Distance (Kmph)</th>
+                        </tr>
+                        <tr>
+                            <th style="font-size:11px;">2nd Prev<br>(Double Yellow)</th>
+                            <th style="font-size:11px;">1st Prev<br>(One Yellow)</th>
+                            
+                            <th>1000m</th>
+                            <th>800m</th>
+                            <th>500m</th>
+                            <th>100m</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div id="printableReport">
+        <div class="report-content-wrapper">
+            <div class="report-header">
+                <h1>Indian Railways - S.E.C.R</h1>
+                <h3>SANKET - SPM Analysis Report</h3>
+                <div style="font-size: 11px; margin-top:5px;">System Generated | Date: <span id="reportDate"></span></div>
+            </div>
+
+            <div class="report-box" style="margin-bottom:15px;">
+                <h4 style="background:#ddd; color:#000;">🚂 Train & Crew Details</h4>
+                <table class="crew-report-table" style="width:100%;">
+                    <tr>
+                        <th style="width:15%;">Train No:</th> <td id="repTrainNo" style="width:35%;"></td>
+                        <th style="width:15%;">Loco No:</th> <td id="repLocoNo" style="width:35%;"></td>
+                    </tr>
+                </table>
+                <table class="crew-report-table" style="width:100%; margin-top:5px;">
+                    <tr style="background:#f9f9f9;">
+                        <th>Role</th> <th>ID</th> <th>Name</th> <th>Desg</th> <th>CLI Name</th> <th>CUG</th>
+                    </tr>
+                    <tr>
+                        <th>LP</th> 
+                        <td id="repLpId"></td> <td id="repLpName"></td> <td id="repLpDesg"></td> <td id="repLpCli"></td> <td id="repLpCug"></td>
+                    </tr>
+                    <tr>
+                        <th>ALP</th> 
+                        <td id="repAlpId"></td> <td id="repAlpName"></td> <td id="repAlpDesg"></td> <td id="repAlpCli"></td> <td id="repAlpCug"></td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="report-grid">
+                <div class="report-box">
+                    <h4>Trip Summary</h4>
+                    <table style="width:100%; text-align:left;">
+                        <tr><td><b>From Stn:</b></td><td id="repFrom"></td></tr>
+                        <tr><td><b>To Stn:</b></td><td id="repTo"></td></tr>
+                        <tr><td><b>Total Dist:</b></td><td id="repDist"></td></tr>
+                        <tr><td><b>Start Time:</b></td><td id="repStart"></td></tr>
+                        <tr><td><b>End Time:</b></td><td id="repEnd"></td></tr>
+                    </table>
+                </div>
+                <div class="report-box">
+                    <h4>Test Compliance (BFT/BPT)</h4>
+                    <div style="margin-bottom:8px; font-size:14px;">
+                        <b>Brake Feel Test:</b> <span id="repBFT"></span>
+                    </div>
+                    <div style="font-size:14px;">
+                        <b>Brake Power Test:</b> <span id="repBPT"></span>
+                    </div>
+                </div>
+            </div>
+
+            <h4 style="border-bottom:1px solid #000; padding-bottom:5px;">🛑 Stoppage Analysis Details</h4>
+            <table class="report-table" id="stoppageTable">
+                <colgroup>
+                    <col class="col-small"> <col class="col-time"> 
+                    <col class="col-med"> <col class="col-med"> 
+                    <col class="col-speed"> <col class="col-speed"> <col class="col-speed"> <col class="col-speed">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th rowspan="2"># / Signal</th>
+                        <th rowspan="2">Time</th>
+                        <th colspan="2">Speed at Prev Signals</th>
+                        <th colspan="4">Speed at Distance</th>
+                    </tr>
+                    <tr>
+                        <th>2nd Prev<br><span style="font-size:9px">(Double Yellow)</span></th>
+                        <th>1st Prev<br><span style="font-size:9px">(One Yellow)</span></th>
+
+                        <th>1000m</th>
+                        <th>800m</th>
+                        <th>500m</th>
+                        <th>100m</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <h4 style="border-bottom:1px solid #000; padding-bottom:5px; margin-top:20px; color:#cc0000;">⚠️ Overspeed Incidents Report</h4>
+            <div id="overspeedReportContainer">
+            </div>
+
+            <h4 style="border-bottom:1px solid #000; padding-bottom:5px; margin-top:20px; color:#ffaa00;">🚧 Caution Order (SR) Compliance</h4>
+            <div id="cautionReportContainer">
+                <div style="color:#777; font-style:italic;">No Caution Data Loaded or No Zones Found.</div>
+            </div>
+
+            <div style="margin-top:40px; display:flex; justify-content:space-between; font-size:11px;">
+                <div><b>Signature of LI/CLI</b></div>
+                <div><b>Signature of Loco Pilot</b></div>
+            </div>
+
+            <div class="page-break"></div>
+            <div class="graph-page-container">
+                <div class="report-chart-box">
+                    <h3 style="text-align:center; font-size:14px; margin:0 0 10px 0;">📈 Braking Performance Graph (Max 10 Stops)</h3>
+                    <canvas id="reportChartCanvas"></canvas>
+                </div>
+            </div>
+
+            <div id="mapSnapshotsContainer"></div>
+
+        </div>
+        
+        <button onclick="document.getElementById('printableReport').style.display='none'" style="position:fixed; top:20px; right:20px; width:auto; z-index:100001; background:red; color:white; padding: 10px;">❌ Close Preview</button>
+    </div>
+
+    <script>
+        // --- GOOGLE SHEETS CONFIG ---
+        const GOOGLE_API_KEY = 'AIzaSyAw23pJz0K9fZb2rRRAe2C2cJDilRc0Kac'; 
+        const SPREADSHEET_ID = '1wnMABJHt3UFLLnsSvocEAgo6Mxv5sgR3cSSknfrIEcg';
+        const SHEET_NAME = 'Sheet1';
+        
+        var crewDataGlobal = [];
+
+        // --- GLOBAL VARS ---
+        var map, googleHybrid, streetLayer;
+        var loadedSignals = [];
+        var globalTrainData = [];
+        var currentPath = [];
+        var detectedStationKey = null;
+        var bigChartInstance = null;
+        var fullJourneyChartInstance = null;
+        var reportChartInstance = null;
+        var matchedSignalsGlobal = []; 
+        var globalBftText = "NOT DONE";
+        var globalBptText = "NOT DONE";
+        var reportSnapshots = [];
+        var overspeedLayerGroup = L.layerGroup(); 
+        var globalOverspeedList = [];
+        var globalMPSUsed = 0;
+
+        // --- NEW GLOBAL VARS FOR CAUTION ORDER ---
+        var globalMastData = {}; 
+        var globalCautionData = []; 
+        var globalCautionAnalysis = []; // Stores ALL analysis (Pass & Fail)
+
+        // --- GOOGLE SHEET FUNCTIONS ---
+        function fetchCrewSheetData() {
+            if(!GOOGLE_API_KEY || GOOGLE_API_KEY === 'YOUR_GOOGLE_API_KEY_HERE') {
+                document.getElementById('sheetStatus').innerText = "⚠️ API Key missing in code!";
+                return;
+            }
+            document.getElementById('sheetStatus').innerText = "Fetching Google Sheet Data...";
+            const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!A:E?key=${GOOGLE_API_KEY}`;
+            
+            fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if(data.values) {
+                    crewDataGlobal = data.values;
+                    document.getElementById('sheetStatus').innerText = `✅ Data Loaded (${crewDataGlobal.length} rows)`;
+                    document.getElementById('sheetStatus').style.color = '#00ff88';
+                } else {
+                    document.getElementById('sheetStatus').innerText = "❌ No data found in sheet.";
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching sheet:', error);
+                document.getElementById('sheetStatus').innerText = "❌ Error fetching data (Check Console)";
+            });
+        }
+
+        function searchCrew(id, role) {
+            if(!id || crewDataGlobal.length === 0) return;
+            let found = crewDataGlobal.find(row => row[0] && row[0].toString().toUpperCase() === id.toUpperCase());
+            if(found) {
+                if(role === 'LP') {
+                    document.getElementById('inLpName').value = found[1] || '';
+                    document.getElementById('inLpDesg').value = found[2] || '';
+                    document.getElementById('inLpCli').value = found[3] || '';
+                    document.getElementById('inLpCug').value = found[4] || '';
+                } else {
+                    document.getElementById('inAlpName').value = found[1] || '';
+                    document.getElementById('inAlpDesg').value = found[2] || '';
+                    document.getElementById('inAlpCli').value = found[3] || '';
+                    document.getElementById('inAlpCug').value = found[4] || '';
+                }
+            }
+        }
+
+        function openCrewModal() {
+            if(!currentPath || currentPath.length === 0) { alert("Please run analysis first!"); return; }
+            document.getElementById('crewModal').style.display = 'block';
+            if(crewDataGlobal.length === 0) { fetchCrewSheetData(); }
+        }
+
+        function finalizeReport() {
+            document.getElementById('repTrainNo').innerText = document.getElementById('inTrainNo').value || '-';
+            document.getElementById('repLocoNo').innerText = document.getElementById('inLocoNo').value || '-';
+            // LP
+            document.getElementById('repLpId').innerText = document.getElementById('inLpId').value || '-';
+            document.getElementById('repLpName').innerText = document.getElementById('inLpName').value || '-';
+            document.getElementById('repLpDesg').innerText = document.getElementById('inLpDesg').value || '-';
+            document.getElementById('repLpCli').innerText = document.getElementById('inLpCli').value || '-';
+            document.getElementById('repLpCug').innerText = document.getElementById('inLpCug').value || '-';
+            // ALP
+            document.getElementById('repAlpId').innerText = document.getElementById('inAlpId').value || '-';
+            document.getElementById('repAlpName').innerText = document.getElementById('inAlpName').value || '-';
+            document.getElementById('repAlpDesg').innerText = document.getElementById('inAlpDesg').value || '-';
+            document.getElementById('repAlpCli').innerText = document.getElementById('inAlpCli').value || '-';
+            document.getElementById('repAlpCug').innerText = document.getElementById('inAlpCug').value || '-';
+
+            closeModal('crewModal');
+            generateFinalReportLogic();
+        }
+
+        // --- MAP SETUP ---
+        googleHybrid = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] });
+        streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+        map = L.map('map', { center: [22.5937, 78.9629], zoom: 6, layers: [googleHybrid], preferCanvas: true });
+        L.control.layers({ "Satellite": googleHybrid, "Street Map": streetLayer }).addTo(map);
+
+        var stopIcon = createIcon('blue');
+        var startIcon = createIcon('green');
+        var endIcon = createIcon('red');
+        var signalIcon = createIcon('orange');
+        var bftIcon = createIcon('yellow');
+        var bptIcon = createIcon('violet');
+        var warnIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [20, 32], iconAnchor: [10, 32], popupAnchor: [1, -25], shadowSize: [32, 32]
+        });
+
+        function createIcon(color) {
+            return new L.Icon({
+                iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+            });
+        }
+
+        function formatExcelTime(val) {
+            if (typeof val === 'number') return new Date(Math.round((val - 25569)*86400*1000)).toLocaleTimeString();
+            return val;
+        }
+
+        function getSignalNameForStop(stopIndex) {
+            if(!matchedSignalsGlobal || matchedSignalsGlobal.length === 0) return "No Signal Data";
+            let stopLatLng = currentPath[stopIndex];
+            let foundSignalName = "No Signal";
+            let nearbySignals = matchedSignalsGlobal.filter(s => {
+                let sLoc = L.latLng(s.signal.lat, s.signal.lng);
+                return stopLatLng.distanceTo(sLoc) <= 500;
+            });
+            if (nearbySignals.length > 0) {
+                let signalAhead = nearbySignals.find(s => s.pathIndex >= stopIndex);
+                if (signalAhead) { foundSignalName = signalAhead.signal.name; } 
+                else {
+                    let signalBehind = nearbySignals[nearbySignals.length - 1];
+                    if (signalBehind) { foundSignalName = signalBehind.signal.name; }
+                }
+            }
+            return foundSignalName;
+        }
+
+        // --- FILE HANDLING ---
+        document.getElementById('signalUpload').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+                var data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                loadedSignals = data.map(row => ({
+                    name: row['Signal Name'] || row['Name'] || Object.values(row)[0],
+                    lat: row['Latitude'] || row['Lat'],
+                    lng: row['Longitude'] || row['Lng'] || row['Long']
+                })).filter(s => s.lat && s.lng);
+                document.getElementById('signalStatus').innerText = `✅ Loaded ${loadedSignals.length} signals.`;
+                document.getElementById('signalStatus').style.color = '#00ff88';
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // 1. Load Mast Data
+        document.getElementById('mastUpload').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+                var data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                globalMastData = {};
+                data.forEach(row => {
+                    let mastName = row['OHE Mast'] || row['Mast'];
+                    let lat = row['Latitude'] || row['Lat'];
+                    let lng = row['Longitude'] || row['Long'] || row['Lng'];
+                    if(mastName && lat && lng) {
+                        globalMastData[mastName.toString().trim()] = { lat: parseFloat(lat), lng: parseFloat(lng) };
+                    }
+                });
+                document.getElementById('mastStatus').innerText = `✅ Loaded Locations for ${Object.keys(globalMastData).length} Masts.`;
+                document.getElementById('mastStatus').style.color = '#00ff88';
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // 2. Load Caution Order Data
+        document.getElementById('cdUpload').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+                globalCautionData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                document.getElementById('cdStatus').innerText = `✅ Loaded ${globalCautionData.length} Caution Orders.`;
+                document.getElementById('cdStatus').style.color = '#00ff88';
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        document.getElementById('logUpload').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (!file) return;
+            document.getElementById('status').innerText = "Analyzing columns...";
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+                globalTrainData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false });
+                if(globalTrainData.length > 0) populateStationDropdowns(globalTrainData);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function populateStationDropdowns(data) {
+            var sampleRow = data[0];
+            var keys = Object.keys(sampleRow);
+            detectedStationKey = keys.find(k => k.trim() === 'Last/Cur StationCode') || 
+                                 keys.find(k => k.toLowerCase().replace(/\s/g, '').includes('last/curstation')) ||
+                                 keys.find(k => k.toLowerCase().includes('stationcode'));
+
+            if (!detectedStationKey) { alert("Station Column not found!"); return; }
+
+            var stations = new Set();
+            data.forEach(row => {
+                let stn = row[detectedStationKey];
+                if(stn) stations.add(stn.toString().trim());
+            });
+
+            var sortedStations = Array.from(stations);
+            var fromSel = document.getElementById('fromStation');
+            var toSel = document.getElementById('toStation');
+            fromSel.innerHTML = ""; toSel.innerHTML = "";
+            sortedStations.forEach(stn => {
+                let opt1 = document.createElement('option'); opt1.value = stn; opt1.innerText = stn;
+                let opt2 = document.createElement('option'); opt2.value = stn; opt2.innerText = stn;
+                fromSel.appendChild(opt1);
+                toSel.appendChild(opt2);
+            });
+            toSel.value = sortedStations[sortedStations.length - 1];
+            document.getElementById('stationSelectDiv').style.display = 'block';
+            document.getElementById('status').innerText = "✅ Ready. Select Route.";
+            document.getElementById('status').style.color = '#4db8ff';
+        }
+
+        function filterAndPlot() {
+            var fromStn = document.getElementById('fromStation').value;
+            var toStn = document.getElementById('toStation').value;
+            if(!fromStn || !toStn) return;
+            var startIndex = globalTrainData.findIndex(row => row[detectedStationKey] == fromStn);
+            var endIndex = -1;
+            for(let i = globalTrainData.length - 1; i >= 0; i--) {
+                if(globalTrainData[i][detectedStationKey] == toStn) { endIndex = i; break; }
+            }
+            if(startIndex === -1 || endIndex === -1 || startIndex > endIndex) { alert("Route error!"); return; }
+            var filteredData = globalTrainData.slice(startIndex, endIndex + 1);
+            document.getElementById('status').innerText = `Running Analysis...`;
+            
+            reportSnapshots = [];
+            document.getElementById('snapCount').innerText = "Snapshots taken: 0";
+            globalOverspeedList = []; 
+            globalMPSUsed = 0;
+            
+            processRun(filteredData);
+        }
+
+        function processRun(trainData) {
+            map.eachLayer(layer => { if (!layer._url && !layer._layers) map.removeLayer(layer); });
+            overspeedLayerGroup.clearLayers(); 
+            overspeedLayerGroup.addTo(map);
+
+            var path = [];
+            var isStopped = false;
+            var stopCounter = 0;
+            trainData.forEach((row) => {
+                let lat = parseFloat(row['Latitude']);
+                let lng = parseFloat(row['Longitude']);
+                let speed = parseFloat(row['Speed']);
+                let time = formatExcelTime(row['Time'] || row['Logging Time']);
+                if (lat && lng) {
+                    var point = L.latLng(lat, lng);
+                    point.time = time;
+                    point.speed = speed;
+                    path.push(point);
+                    let currentIndex = path.length - 1;
+                    if (speed === 0) {
+                        if (!isStopped) {
+                            stopCounter++;
+                            let chartId = `chartCanvas-${stopCounter}`;
+                            let popupContent = `<div style="font-size:14px; font-weight:bold; margin-bottom:5px;">🛑 STOPPAGE ANALYSIS</div><div>Time: ${time}</div><div class="graph-container"><canvas id="${chartId}"></canvas></div>`;
+                            let stopMarker = L.marker([lat, lng], {icon: stopIcon}).addTo(map);
+                            stopMarker.bindPopup(popupContent);
+                            stopMarker.on('popupopen', function() { setTimeout(() => { renderSingleBrakingChart(chartId, path, currentIndex); }, 100); });
+                            isStopped = true;
+                        }
+                    } else { isStopped = false; }
+                }
+            });
+            currentPath = path;
+            if (path.length > 0) {
+                var polyline = L.polyline(path, { color: '#ff3333', weight: 4, opacity: 0.6 }).addTo(map);
+                map.fitBounds(polyline.getBounds());
+                L.marker(path[0], {icon: startIcon}).addTo(map).bindPopup("Start");
+                L.marker(path[path.length - 1], {icon: endIcon}).addTo(map).bindPopup("End");
+                analyzeBrakeTests(path);
+                if (loadedSignals.length > 0) { filterAndMatchSignals(loadedSignals, path); } else { matchedSignalsGlobal = []; }
+                
+                // --- EXECUTE CAUTION ANALYSIS ---
+                analyzeCautionOrders();
+
+                document.getElementById('analysisButtons').style.display = 'block';
+                document.getElementById('status').innerText = `✅ Analysis Complete.`;
+                document.getElementById('status').style.color = '#00ff88';
+            }
+        }
+
+        // --- CAUTION ORDER ANALYSIS LOGIC ---
+        function analyzeCautionOrders() {
+            if(Object.keys(globalMastData).length === 0 || globalCautionData.length === 0 || currentPath.length === 0) {
+                console.log("Skipping Caution Analysis: Missing Data");
+                return;
+            }
+
+            globalCautionAnalysis = []; // Clear previous results
+            let trainType = document.getElementById('trainType').value;
+            // Column mapping based on user file headers
+            let colName = trainType === 'GOODS' ? 'Goods' : 'Coaching/Memu';
+
+            globalCautionData.forEach(cdRow => {
+                let fromMast = cdRow['From OHE Mast Number'];
+                let toMast = cdRow['To OHE mast Numnber'];
+                let limit = parseFloat(cdRow[colName]);
+
+                if(fromMast && toMast && limit) {
+                    let startLoc = globalMastData[fromMast.toString().trim()];
+                    let endLoc = globalMastData[toMast.toString().trim()];
+
+                    if(startLoc && endLoc) {
+                        let startIdx = findClosestPathIndex(startLoc);
+                        let endIdx = findClosestPathIndex(endLoc);
+
+                        if(startIdx !== -1 && endIdx !== -1) {
+                            let s = Math.min(startIdx, endIdx);
+                            let e = Math.max(startIdx, endIdx);
+                            let segment = currentPath.slice(s, e + 1);
+                            
+                            if(segment.length > 0) {
+                                let maxSpeedInZone = 0;
+                                segment.forEach(pt => {
+                                    if(pt.speed > maxSpeedInZone) maxSpeedInZone = pt.speed;
+                                });
+
+                                let status = "PASS";
+                                // Check Violation (Buffer of 2 Kmph allowed)
+                                if(maxSpeedInZone > limit + 2) {
+                                    status = "FAIL";
+                                    // DRAW VIOLATION ON MAP (Red Dashed)
+                                    L.polyline(segment, { color: '#ff0000', weight: 6, opacity: 0.8, dashArray: '10, 10' }).addTo(map)
+                                     .bindPopup(`<b>⚠️ Caution Violation</b><br>Zone: ${fromMast} to ${toMast}<br>Limit: ${limit} Kmph<br>Actual: ${maxSpeedInZone} Kmph`);
+                                } else {
+                                    status = "PASS";
+                                    // DRAW SAFE CAUTION ON MAP (Orange)
+                                    L.polyline(segment, { color: '#ffaa00', weight: 5, opacity: 0.6 }).addTo(map)
+                                     .bindPopup(`<b>✅ Caution Zone (Safe)</b><br>Zone: ${fromMast} to ${toMast}<br>Limit: ${limit} Kmph<br>Max: ${maxSpeedInZone} Kmph`);
+                                }
+
+                                // ADD TO GLOBAL RESULTS
+                                globalCautionAnalysis.push({
+                                    from: fromMast,
+                                    to: toMast,
+                                    limit: limit,
+                                    actual: maxSpeedInZone,
+                                    startTime: segment[0].time,
+                                    endTime: segment[segment.length-1].time,
+                                    status: status
+                                });
+                            }
+                        }
+                    }
+                }
+            });
+            updateCautionReport();
+        }
+
+        function findClosestPathIndex(targetLoc) {
+            let closestDist = Infinity;
+            let closestIdx = -1;
+            let targetLatLng = L.latLng(targetLoc.lat, targetLoc.lng);
+
+            for(let i=0; i<currentPath.length; i++) {
+                let d = currentPath[i].distanceTo(targetLatLng);
+                if(d < closestDist) {
+                    closestDist = d;
+                    closestIdx = i;
+                }
+            }
+            return closestDist < 300 ? closestIdx : -1; // 300m threshold
+        }
+
+        function updateCautionReport() {
+            let container = document.getElementById('cautionReportContainer');
+            // Update PDF section
+            if(globalCautionAnalysis.length === 0) {
+                container.innerHTML = `<div style="padding:10px; border:1px solid green; color:green;">✅ No Caution Order Data or Zones Found.</div>`;
+            } else {
+                let html = `
+                <table class="report-table">
+                    <thead>
+                        <tr style="background:#ffd1b3;">
+                            <th>Zone (Mast to Mast)</th>
+                            <th>Time</th>
+                            <th>Limit</th>
+                            <th>Actual Max</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+                globalCautionAnalysis.forEach(v => {
+                    let statusClass = v.status === "FAIL" ? "fail-badge" : "pass-badge";
+                    let statusText = v.status === "FAIL" ? "FAILED" : "COMPLIED";
+                    let actualColor = v.status === "FAIL" ? "red" : "green";
+
+                    html += `
+                    <tr>
+                        <td>${v.from} ➡ ${v.to}</td>
+                        <td>${v.startTime}</td>
+                        <td>${v.limit}</td>
+                        <td style="color:${actualColor}; font-weight:bold;">${v.actual}</td>
+                        <td class="${statusClass}">${statusText}</td>
+                    </tr>`;
+                });
+                html += `</tbody></table>`;
+                container.innerHTML = html;
+            }
+        }
+        
+        function showCautionModal() {
+            if(!currentPath || currentPath.length === 0) { alert("Run Analysis First!"); return; }
+            document.getElementById('cautionModal').style.display = 'block';
+            let tbody = document.querySelector('#cautionTable tbody');
+            tbody.innerHTML = "";
+            
+            if(globalCautionAnalysis.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="color:#aaa; padding:20px;">No Caution Data found.</td></tr>`;
+            } else {
+                globalCautionAnalysis.forEach(v => {
+                    let statusClass = v.status === "FAIL" ? "status-fail" : "status-pass";
+                    let statusText = v.status === "FAIL" ? "FAIL" : "PASS";
+                    let row = `<tr>
+                        <td>${v.from} ➡ ${v.to}</td>
+                        <td>${v.startTime}</td>
+                        <td>${v.limit}</td>
+                        <td style="font-weight:bold;">${v.actual}</td>
+                        <td class="${statusClass}">${statusText}</td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                });
+            }
+        }
+
+        // --- FULL JOURNEY GRAPH LOGIC ---
+        function showFullJourneyGraph() {
+            if(!currentPath || currentPath.length === 0) return;
+            document.getElementById('fullGraphModal').style.display = 'block';
+            let distData = []; let cumDist = 0; distData.push({x: 0, y: currentPath[0].speed}); 
+            let indexToDistMap = {}; indexToDistMap[0] = 0;
+            for(let i=1; i<currentPath.length; i++) {
+                let d = currentPath[i].distanceTo(currentPath[i-1]); cumDist += d;
+                let kmDist = cumDist / 1000; distData.push({x: kmDist, y: currentPath[i].speed});
+                indexToDistMap[i] = kmDist;
+            }
+            let totalDistKm = cumDist / 1000;
+            let signalPoints = [];
+            if(matchedSignalsGlobal && matchedSignalsGlobal.length > 0) {
+                matchedSignalsGlobal.forEach(sig => {
+                    let distKM = indexToDistMap[sig.pathIndex];
+                    if(distKM !== undefined) {
+                        signalPoints.push({ x: distKM, y: sig.crossingSpeed, sigName: sig.signal.name, time: sig.crossingTime });
+                    }
+                });
+            }
+            const ctx = document.getElementById('fullJourneyChart').getContext('2d');
+            if (fullJourneyChartInstance) fullJourneyChartInstance.destroy();
+            fullJourneyChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [
+                        { label: 'Train Speed', data: distData, borderColor: '#00ff88', backgroundColor: 'rgba(0, 255, 136, 0.1)', borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.1, order: 2 },
+                        { label: 'Signals', type: 'scatter', data: signalPoints, backgroundColor: '#ffaa00', pointRadius: 5, pointHoverRadius: 8, order: 1 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: 'Distance', color: '#fff' }, ticks: { color: '#ddd' }, grid: { color: '#444' }, min: 0, max: totalDistKm },
+                        y: { beginAtZero: true, title: { display: true, text: 'Speed', color: '#fff' }, ticks: { color: '#ddd' }, grid: { color: '#444' } }
+                    },
+                    plugins: { zoom: { zoom: { wheel: { enabled: true }, mode: 'x' }, pan: { enabled: true, mode: 'x' } } }
+                }
+            });
+        }
+        function resetFullGraphZoom() { if(fullJourneyChartInstance) fullJourneyChartInstance.resetZoom(); }
+
+        // --- SAVE & LOAD PROJECT ---
+        function saveProject() {
+            if (!currentPath || currentPath.length === 0) { alert("Analysis First!"); return; }
+            const projectData = {
+                version: "1.0",
+                date: new Date().toISOString(),
+                meta: { fromStation: document.getElementById('fromStation').value, toStation: document.getElementById('toStation').value, trainType: document.getElementById('trainType').value },
+                pathData: currentPath.map(p => ({ lat: p.lat, lng: p.lng, speed: p.speed, time: p.time })),
+                signals: loadedSignals, snapshots: reportSnapshots, overspeedList: globalOverspeedList, mpsUsed: globalMPSUsed, bftStatus: globalBftText, bptStatus: globalBptText
+            };
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(projectData));
+            const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", `SANKET_Analysis.json`);
+            document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove();
+        }
+        function loadProject(input) {
+            const file = input.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) { try { const data = JSON.parse(e.target.result); restoreProject(data); } catch (err) { console.error(err); alert("Error!"); } input.value = ''; };
+            reader.readAsText(file);
+        }
+        function restoreProject(data) {
+            document.getElementById('status').innerText = "Restoring Project...";
+            if(document.getElementById('fromStation').options.length === 0) {
+                let fromSel = document.getElementById('fromStation'); let toSel = document.getElementById('toStation');
+                fromSel.innerHTML = `<option>${data.meta.fromStation}</option>`; toSel.innerHTML = `<option>${data.meta.toStation}</option>`;
+            } else { document.getElementById('fromStation').value = data.meta.fromStation; document.getElementById('toStation').value = data.meta.toStation; }
+            document.getElementById('trainType').value = data.meta.trainType || "GOODS";
+            loadedSignals = data.signals || []; reportSnapshots = data.snapshots || []; globalOverspeedList = data.overspeedList || []; globalMPSUsed = data.mpsUsed || 0;
+            globalBftText = data.bftStatus || "NOT DONE"; globalBptText = data.bptStatus || "NOT DONE";
+            document.getElementById('snapCount').innerText = `Snapshots taken: ${reportSnapshots.length}`;
+            currentPath = data.pathData.map(p => { let point = L.latLng(p.lat, p.lng); point.speed = p.speed; point.time = p.time; return point; });
+            map.eachLayer(layer => { if (!layer._url && !layer._layers) map.removeLayer(layer); });
+            overspeedLayerGroup.clearLayers(); overspeedLayerGroup.addTo(map);
+            if (currentPath.length > 0) {
+                var polyline = L.polyline(currentPath, { color: '#ff3333', weight: 4, opacity: 0.6 }).addTo(map); map.fitBounds(polyline.getBounds());
+                L.marker(currentPath[0], {icon: startIcon}).addTo(map).bindPopup("Start"); L.marker(currentPath[currentPath.length - 1], {icon: endIcon}).addTo(map).bindPopup("End");
+                if (loadedSignals.length > 0) { filterAndMatchSignals(loadedSignals, currentPath); } else { matchedSignalsGlobal = []; }
+                let isStopped = false; let stopCounter = 0;
+                currentPath.forEach((pt, idx) => {
+                    if (pt.speed === 0) {
+                        if (!isStopped) {
+                            stopCounter++; let chartId = `chartCanvasRestore-${stopCounter}`;
+                            let popupContent = `<div style="font-size:14px; font-weight:bold; margin-bottom:5px;">🛑 STOPPAGE ANALYSIS</div><div>Time: ${pt.time}</div><div class="graph-container"><canvas id="${chartId}"></canvas></div>`;
+                            let stopMarker = L.marker([pt.lat, pt.lng], {icon: stopIcon}).addTo(map);
+                            stopMarker.bindPopup(popupContent); stopMarker.on('popupopen', function() { setTimeout(() => { renderSingleBrakingChart(chartId, currentPath, idx); }, 100); });
+                            isStopped = true;
+                        }
+                    } else { isStopped = false; }
+                });
+                analyzeBrakeTests(currentPath);
+                if(globalOverspeedList.length > 0 && globalMPSUsed > 0) { document.getElementById('mpsSelect').value = globalMPSUsed; }
+                document.getElementById('analysisButtons').style.display = 'block';
+                document.getElementById('status').innerText = "✅ Project Loaded Successfully."; document.getElementById('status').style.color = '#00ff88';
+                let osContainer = document.getElementById('overspeedReportContainer'); if(globalOverspeedList.length > 0) { osContainer.innerHTML = `<div style="color: green; padding:10px; border:1px solid green;">Data loaded. Click 'Generate PDF' to view tables.</div>`; }
+            }
+        }
+
+        // --- OVERSPEED LOGIC ---
+        function checkOverspeed() {
+            if(!currentPath || currentPath.length === 0) { alert("Please load route first."); return; }
+            overspeedLayerGroup.clearLayers(); globalOverspeedList = []; 
+            let mps = parseFloat(document.getElementById('mpsSelect').value); globalMPSUsed = mps;
+            let incidentCount = 0; let isOverspeeding = false; let startIdx = 0; let maxSpeedInZone = 0;
+            for(let i=0; i<currentPath.length; i++) {
+                let spd = currentPath[i].speed;
+                if(spd > mps) {
+                    if(!isOverspeeding) { startIdx = i; isOverspeeding = true; maxSpeedInZone = spd; }
+                    if(spd > maxSpeedInZone) maxSpeedInZone = spd;
+                } else {
+                    if(isOverspeeding) {
+                        drawOverspeedSegment(startIdx, i, maxSpeedInZone, mps);
+                        globalOverspeedList.push({ sTime: currentPath[startIdx].time, eTime: currentPath[i].time, maxSpd: maxSpeedInZone, dist: getTrackDistance(currentPath, startIdx, i) });
+                        incidentCount++; isOverspeeding = false;
+                    }
+                }
+            }
+            if(isOverspeeding) {
+                drawOverspeedSegment(startIdx, currentPath.length-1, maxSpeedInZone, mps);
+                globalOverspeedList.push({ sTime: currentPath[startIdx].time, eTime: currentPath[currentPath.length-1].time, maxSpd: maxSpeedInZone, dist: getTrackDistance(currentPath, startIdx, currentPath.length-1) });
+                incidentCount++;
+            }
+            if(incidentCount > 0) { alert(`⚠️ Detected ${incidentCount} overspeed zones above ${mps} Kmph!\nAdded to Map & Report.`); } else { alert(`✅ No overspeeding detected above ${mps} Kmph.`); }
+            // Re-apply caution visual if data exists
+            analyzeCautionOrders();
+        }
+        function drawOverspeedSegment(idx1, idx2, maxSpeed, mps) {
+            let segment = currentPath.slice(idx1, idx2 + 1);
+            let poly = L.polyline(segment, { color: '#00FFFF', weight: 5, opacity: 1, dashArray: '10, 5' }).addTo(overspeedLayerGroup);
+            let startPt = currentPath[idx1];
+            L.marker(startPt, {icon: warnIcon}).addTo(overspeedLayerGroup).bindPopup(`<b style="color:red">⚠️ OVERSPEED DETECTED</b><br>MPS Limit: ${mps} Kmph<br>Max Speed Here: ${maxSpeed} Kmph<br>Time: ${startPt.time}`);
+        }
+
+        // --- SNAPSHOT & PDF ---
+        function captureSnapshot() {
+            document.querySelector('.controls').style.display = 'none'; document.querySelector('.leaflet-control-container').style.display = 'none';
+            html2canvas(document.getElementById('map'), { useCORS: true, allowTaint: true, scale: 1 }).then(canvas => {
+                document.querySelector('.controls').style.display = 'block'; document.querySelector('.leaflet-control-container').style.display = 'block';
+                let comment = prompt("Enter a comment for this snapshot (e.g. 'Overspeed at Signal 23'):", "Map View"); if (comment === null) return; 
+                let imgData = canvas.toDataURL("image/png"); reportSnapshots.push({ img: imgData, comment: comment });
+                document.getElementById('snapCount').innerText = `Snapshots taken: ${reportSnapshots.length}`;
+            }).catch(err => { console.error(err); alert("Error capturing map!"); document.querySelector('.controls').style.display = 'block'; document.querySelector('.leaflet-control-container').style.display = 'block'; });
+        }
+
+        function generateFinalReportLogic() {
+            if (reportSnapshots.length === 0) {
+                if(confirm("No snapshots taken. Auto-capture full route view?")) {
+                    document.querySelector('.controls').style.display = 'none'; document.querySelector('.leaflet-control-container').style.display = 'none';
+                    html2canvas(document.getElementById('map'), { useCORS: true, allowTaint: true }).then(canvas => {
+                        document.querySelector('.controls').style.display = 'block'; document.querySelector('.leaflet-control-container').style.display = 'block';
+                        reportSnapshots.push({ img: canvas.toDataURL("image/png"), comment: "Full Route Overview" }); populateAndPrint();
+                    });
+                } else { populateAndPrint(); }
+            } else { populateAndPrint(); }
+        }
+
+        function populateAndPrint() {
+            var reportDiv = document.getElementById('printableReport'); reportDiv.style.display = 'block'; window.scrollTo(0,0);
+            let snapContainer = document.getElementById('mapSnapshotsContainer'); snapContainer.innerHTML = "";
+            if(reportSnapshots.length > 0) { let breakDiv = document.createElement('div'); breakDiv.className = 'page-break'; snapContainer.appendChild(breakDiv); }
+            for (let i = 0; i < reportSnapshots.length; i += 3) {
+                let chunk = reportSnapshots.slice(i, i + 3); let pageDiv = document.createElement('div'); pageDiv.className = 'snapshot-page-container';
+                if(i === 0) { let header = document.createElement('h3'); header.className = 'snapshot-heading'; header.innerText = "🗺️ Route Visualizations"; pageDiv.appendChild(header); }
+                chunk.forEach((snap, idx) => {
+                    let globalIndex = i + idx + 1;
+                    let html = `<div class="snapshot-item"><div class="snapshot-img-box"><img src="${snap.img}" /></div><div class="snapshot-comment">📝 #${globalIndex}: ${snap.comment}</div></div>`;
+                    pageDiv.innerHTML += html;
+                });
+                snapContainer.appendChild(pageDiv); 
+            }
+            document.getElementById('reportDate').innerText = new Date().toLocaleString();
+            document.getElementById('repFrom').innerText = document.getElementById('fromStation').value; document.getElementById('repTo').innerText = document.getElementById('toStation').value;
+            let totalDistMeters = getTrackDistance(currentPath, 0, currentPath.length-1); document.getElementById('repDist').innerText = (totalDistMeters/1000).toFixed(2) + " km";
+            document.getElementById('repStart').innerText = currentPath[0].time; document.getElementById('repEnd').innerText = currentPath[currentPath.length-1].time;
+            let bftEl = document.getElementById('repBFT'); bftEl.innerText = globalBftText; bftEl.className = globalBftText.includes("DONE") ? "pass-badge" : "fail-badge";
+            let bptEl = document.getElementById('repBPT'); bptEl.innerText = globalBptText; bptEl.className = globalBptText.includes("DONE") ? "pass-badge" : "fail-badge";
+            
+            let tbodyStop = document.querySelector('#stoppageTable tbody'); tbodyStop.innerHTML = ""; let isStopped = false; let stopCount = 0;
+            for(let i=0; i<currentPath.length; i++) {
+                if(currentPath[i].speed === 0) {
+                    if(!isStopped) {
+                        stopCount++; let brakeData = getBrakingData(currentPath, i); 
+                        let s1000 = brakeData.points.find(p => p.x >= 1000)?.y || "-"; let s800 = brakeData.points.find(p => p.x >= 800)?.y || "-"; let s500 = brakeData.points.find(p => p.x >= 500)?.y || "-"; let s100 = brakeData.points.find(p => p.x >= 100)?.y || "-";
+                        let stopIdx = i; let candidates = matchedSignalsGlobal.filter(s => s.pathIndex < stopIdx).sort((a,b) => b.pathIndex - a.pathIndex); let validSignals = [];
+                        for(let s of candidates) { let distToStop = getTrackDistance(currentPath, s.pathIndex, stopIdx); if(distToStop >= 450) { validSignals.push({ speed: s.crossingSpeed, name: s.signal.name }); } if(validSignals.length >= 2) break; }
+                        let firstPrevHtml = formatSignalCell(validSignals[0], true); let secondPrevHtml = formatSignalCell(validSignals[1], false); let sigName = getSignalNameForStop(i);
+                        let row = `<tr><td style="font-size:10px;"><b>${stopCount}</b><br>${sigName}</td> <td>${currentPath[i].time}</td> <td>${secondPrevHtml}</td> <td>${firstPrevHtml}</td><td>${typeof s1000 === 'number' ? Math.round(s1000) : s1000}</td> <td>${typeof s800 === 'number' ? Math.round(s800) : s800}</td><td>${typeof s500 === 'number' ? Math.round(s500) : s500}</td> <td>${typeof s100 === 'number' ? Math.round(s100) : s100}</td></tr>`;
+                        tbodyStop.innerHTML += row; isStopped = true;
+                    }
+                } else { isStopped = false; }
+            }
+
+            let osContainer = document.getElementById('overspeedReportContainer'); osContainer.innerHTML = "";
+            if (globalOverspeedList.length === 0) {
+                let msg = globalMPSUsed > 0 ? `✅ No Overspeed Incidents Detected (MPS: ${globalMPSUsed} Kmph)` : `ℹ️ Overspeed Check Not Performed`;
+                osContainer.innerHTML = `<div style="padding:10px; border:1px solid #ccc; background:#f0f0f0; color:#555; font-weight:bold; text-align:center;">${msg}</div>`;
+            } else {
+                let html = `<div style="margin-bottom:10px; font-size:12px;"><b>Analysis MPS Limit:</b> ${globalMPSUsed} Kmph</div><table class="report-table"><thead><tr style="background:#ffcccc;"><th>#</th><th>Start Time</th><th>End Time</th><th>Max Speed (Kmph)</th><th>Duration / Dist (m)</th></tr></thead><tbody>`;
+                globalOverspeedList.forEach((item, index) => { html += `<tr><td>${index + 1}</td><td style="color:#cc0000; font-weight:bold;">${item.sTime}</td><td>${item.eTime}</td><td style="font-weight:bold;">${item.maxSpd}</td><td>${Math.round(item.dist)} m</td></tr>`; });
+                html += `</tbody></table>`; osContainer.innerHTML = html;
+            }
+
+            const ctxRep = document.getElementById('reportChartCanvas').getContext('2d');
+            if (reportChartInstance) reportChartInstance.destroy();
+            let allDatasets = getAggregateDatasets(); let limitedDatasets = allDatasets.slice(0, 10);
+            const reportColors = ['#FF0000', '#0000FF', '#008000', '#FFA500', '#800080', '#00CED1', '#FF00FF', '#A52A2A', '#000080', '#000000'];
+            limitedDatasets.forEach((d, index) => { d.borderWidth = 2.5; d.borderColor = reportColors[index % reportColors.length]; d.pointRadius = 0; d.tension = 0.4; });
+            reportChartInstance = new Chart(ctxRep, { type: 'line', data: { datasets: limitedDatasets }, options: getAggregateChartOptions(false) });
+
+            document.getElementById('status').innerText = "⏳ Generating PDF... Please wait.";
+            setTimeout(() => { 
+                var opt = { margin: [5, 5, 5, 5], filename: `SANKET_Report_${document.getElementById('fromStation').value}_${document.getElementById('toStation').value}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, scrollY: 0, windowWidth: document.body.scrollWidth }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } };
+                html2pdf().set(opt).from(document.querySelector('.report-content-wrapper')).save().then(() => {
+                    document.getElementById('status').innerText = "✅ PDF Downloaded."; reportDiv.style.display = 'none'; 
+                }).catch(err => { console.error("PDF Failed", err); alert("PDF Generation failed. Switching to Browser Print."); window.print(); });
+            }, 1000); 
+        }
+
+        // --- AGGREGATE CHART LOGIC ---
+        function getAggregateDatasets() {
+            let datasets = []; let isStopped = false;
+            for(let i=0; i<currentPath.length; i++) {
+                if(currentPath[i].speed === 0) {
+                    if(!isStopped) {
+                        let result = getBrakingData(currentPath, i); let color = `hsl(${Math.random() * 360}, 100%, 60%)`;
+                        let sigName = getSignalNameForStop(i);
+                        datasets.push({ label: `${sigName} (${currentPath[i].time})`, data: result.points, borderColor: color, borderWidth: 2, pointRadius: 0, pointHoverRadius: 6, tension: 0.4 });
+                        isStopped = true;
+                    }
+                } else { isStopped = false; }
+            }
+            return datasets;
+        }
+        function showAggregateGraph() {
+            if(!currentPath || currentPath.length === 0) return;
+            document.getElementById('chartModal').style.display = 'block';
+            const ctx = document.getElementById('allStopsChart').getContext('2d');
+            if (bigChartInstance) bigChartInstance.destroy();
+            bigChartInstance = new Chart(ctx, { type: 'line', data: { datasets: getAggregateDatasets() }, options: getAggregateChartOptions(true) });
+        }
+
+        // --- COMMON HELPERS ---
+        function getTrackDistance(path, idxStart, idxEnd) {
+            let d = 0; if(idxStart > idxEnd) { let temp = idxStart; idxStart = idxEnd; idxEnd = temp; }
+            for(let k = idxStart; k < idxEnd; k++) { d += path[k].distanceTo(path[k+1]); }
+            return d;
+        }
+        function getBrakingData(path, stopIndex) {
+            let dataPoints = []; let cumulativeDist = 0; dataPoints.push({ x: 0, y: 0 });
+            for (let i = stopIndex; i > 0; i--) {
+                let p1 = path[i]; let p2 = path[i-1]; let dist = p1.distanceTo(p2); cumulativeDist += dist;
+                dataPoints.push({ x: Math.round(cumulativeDist), y: p2.speed }); if (cumulativeDist >= 1200) break;
+            }
+            return { points: dataPoints, labels: dataPoints.map(p => p.x), speed: dataPoints.map(p => p.y) };
+        }
+        function renderSingleBrakingChart(canvasId, path, stopIndex) {
+            const ctx = document.getElementById(canvasId).getContext('2d'); let result = getBrakingData(path, stopIndex);
+            new Chart(ctx, { type: 'line', data: { datasets: [{ label: 'Speed (Kmph)', data: result.points, borderColor: '#00ff88', borderWidth: 2, pointRadius: 1, tension: 0.3 }] }, options: getCommonChartOptions() });
+        }
+        function getCommonChartOptions() {
+            return { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'linear', reverse: true, min: 0, max: 1200, title: { display: true, text: 'Dist (m)', color: '#aaa' }, ticks: { color: '#ddd' }, grid: { color: '#444' } }, y: { beginAtZero: true, title: { display: true, text: 'Speed', color: '#aaa' }, ticks: { color: '#ddd' }, grid: { color: '#444' } } }, plugins: { legend: { display: false } } };
+        }
+        function getAggregateChartOptions(isDark) {
+            let textColor = isDark ? '#ddd' : '#000'; let gridColor = isDark ? '#444' : '#ccc';
+            return { animation: false, responsive: true, maintainAspectRatio: false, interaction: { mode: 'nearest', axis: 'xy', intersect: false }, scales: { x: { type: 'linear', reverse: true, min: 0, max: 1200, title: { display: true, text: 'Distance to Stop (Meters)', color: textColor, font: {weight: 'bold'} }, ticks: { color: textColor }, grid: { color: gridColor } }, y: { beginAtZero: true, title: { display: true, text: 'Speed (Kmph)', color: textColor, font: {weight: 'bold'} }, ticks: { color: textColor }, grid: { color: gridColor } } }, plugins: { legend: { labels: { color: textColor, font: {size: 10} }, position: 'top' }, tooltip: { mode: 'nearest', intersect: false } } };
+        }
+        function highlightSegment(path, startIdx, endIdx, color) { var segment = path.slice(startIdx, endIdx + 1); L.polyline(segment, { color: color, weight: 6, opacity: 1 }).addTo(map).bringToFront(); }
+        function analyzeBrakeTests(path) {
+            var trainType = document.getElementById('trainType').value; const BFT_MIN = 14; const BFT_MAX = 21; const BFT_DROP_REQ = 5;
+            let BPT_MIN, BPT_MAX; if(trainType === 'GOODS') { BPT_MIN = 40; BPT_MAX = 50; } else { BPT_MIN = 60; BPT_MAX = 70; }
+            const BPT_DROP_PERCENT = 0.40; let hasDetectedBFT = false; let hasDetectedBPT = false; let lookingForBFT = true; globalBftText = "NOT DONE"; globalBptText = "NOT DONE";
+            document.getElementById('testReport').style.display = 'block'; document.getElementById('bftStatus').innerText = "NOT DONE"; document.getElementById('bftStatus').className = "status-fail"; document.getElementById('bptStatus').innerText = "NOT DONE"; document.getElementById('bptStatus').className = "status-fail";
+            for (let i = 0; i < path.length; i++) {
+                let p = path[i]; let speed = p.speed;
+                if (speed === 0) { lookingForBFT = true; continue; }
+                if (!hasDetectedBFT && lookingForBFT) {
+                    if (speed > BFT_MAX) { lookingForBFT = false; } else if (speed >= BFT_MIN && speed <= BFT_MAX) {
+                        let currentPeak = speed; let peakIndex = i;
+                        for (let j = i + 1; j < Math.min(path.length, i + 30); j++) {
+                            let futureSpeed = path[j].speed; if (futureSpeed > BFT_MAX + 2) break; if(futureSpeed > currentPeak) { currentPeak = futureSpeed; peakIndex = j; }
+                            if ((currentPeak - futureSpeed) >= BFT_DROP_REQ) { highlightSegment(path, peakIndex, j, '#FFFF00'); L.marker([path[j].lat, path[j].lng], {icon: bftIcon}).addTo(map).bindPopup(`<b>🟡 BFT Detected</b><br>Drop: ${currentPeak} -> ${futureSpeed} kmph`); hasDetectedBFT = true; lookingForBFT = false; globalBftText = `DONE (${currentPeak} -> ${futureSpeed} Kmph)`; document.getElementById('bftStatus').innerText = "DONE ✅"; document.getElementById('bftStatus').className = "status-pass"; break; }
+                        }
+                    }
+                }
+                if (!hasDetectedBPT && speed >= BPT_MIN && speed <= BPT_MAX) {
+                    let startSpeed = speed; let targetSpeed = startSpeed * (1 - BPT_DROP_PERCENT); let potentialSuccess = false; let lastSpeed = speed; let jitterCount = 0; let successIndex = -1;
+                    for (let k = i + 1; k < Math.min(path.length, i + 120); k++) { let curSpeed = path[k].speed; if (curSpeed <= targetSpeed) { successIndex = k; potentialSuccess = true; break; } if (curSpeed > lastSpeed + 2) { jitterCount++; if (jitterCount > 2) break; } else { jitterCount = 0; } if (curSpeed === 0) break; lastSpeed = curSpeed; }
+                    if (potentialSuccess && successIndex !== -1) { highlightSegment(path, i, successIndex, '#9933ff'); L.marker([path[successIndex].lat, path[successIndex].lng], {icon: bptIcon}).addTo(map).bindPopup(`<b>🟣 BPT Detected</b><br>Drop: ${startSpeed} -> ${path[successIndex].speed} kmph`); hasDetectedBPT = true; globalBptText = `DONE (${startSpeed} -> ${path[successIndex].speed} Kmph)`; document.getElementById('bptStatus').innerText = "DONE ✅"; document.getElementById('bptStatus').className = "status-pass"; }
+                }
+            }
+        }
+        function filterAndMatchSignals(signals, trainPath) {
+            matchedSignalsGlobal = [];
+            signals.forEach(signal => {
+                let sigLatLng = L.latLng(signal.lat, signal.lng); let closestDist = Infinity; let closestIndex = -1;
+                for (let i = 0; i < trainPath.length; i++) { let d = sigLatLng.distanceTo(trainPath[i]); if (d < closestDist) { closestDist = d; closestIndex = i; } }
+                if (closestDist < 50 && closestIndex !== -1) { matchedSignalsGlobal.push({ signal: signal, pathIndex: closestIndex, distance: closestDist, crossingTime: trainPath[closestIndex].time, crossingSpeed: trainPath[closestIndex].speed }); }
+            });
+            matchedSignalsGlobal.sort((a, b) => a.pathIndex - b.pathIndex);
+            matchedSignalsGlobal.forEach(item => { 
+                let sMarker = L.marker([item.signal.lat, item.signal.lng], {icon: signalIcon}).addTo(map);
+                let popup = L.popup({ autoClose: false, closeOnClick: false, offset: [0, -30] })
+                             .setContent(`<b>🚦 ${item.signal.name}</b><br>Speed: ${item.crossingSpeed} kmph<br>Time: ${item.crossingTime}`);
+                sMarker.bindPopup(popup); 
+                sMarker.off('click'); 
+                sMarker.on('click', function() { if (sMarker.isPopupOpen()) { sMarker.closePopup(); } else { sMarker.openPopup(); } });
+            });
+        }
+        function formatSignalCell(signalObj, isFirstPrev) {
+            if (!signalObj) return "-"; var speed = Math.round(signalObj.speed); var name = signalObj.name; var trainType = document.getElementById('trainType').value; var displayText = `${speed} <span style="font-size:0.85em">(${name})</span>`; var isViolation = false;
+            if (trainType === 'COACHING') { if (isFirstPrev) { if (speed > 60) isViolation = true; } else { if (speed > 100) isViolation = true; } } else { if (isFirstPrev) { if (speed > 40) isViolation = true; } else { if (speed > 55) isViolation = true; } }
+            if (isViolation) { return `<span style="color:red; font-weight:bold;">${displayText}</span>`; } return displayText;
+        }
+        function showStoppageTable() {
+            if(!currentPath || currentPath.length === 0) { alert("Run Analysis First!"); return; } document.getElementById('tableModal').style.display = 'block'; let tbody = document.querySelector('#dashboardTable tbody'); tbody.innerHTML = ""; let isStopped = false; let stopCount = 0;
+            for(let i=0; i<currentPath.length; i++) {
+                if(currentPath[i].speed === 0) {
+                    if(!isStopped) {
+                        stopCount++; let brakeData = getBrakingData(currentPath, i); 
+                        let s1000 = brakeData.points.find(p => p.x >= 1000)?.y || "-"; let s800 = brakeData.points.find(p => p.x >= 800)?.y || "-"; let s500 = brakeData.points.find(p => p.x >= 500)?.y || "-"; let s100 = brakeData.points.find(p => p.x >= 100)?.y || "-";
+                        let stopIdx = i; let candidates = matchedSignalsGlobal.filter(s => s.pathIndex < stopIdx).sort((a,b) => b.pathIndex - a.pathIndex); let validSignals = [];
+                        for(let s of candidates) { let distToStop = getTrackDistance(currentPath, s.pathIndex, stopIdx); if(distToStop >= 450) { validSignals.push({ speed: s.crossingSpeed, name: s.signal.name }); } if(validSignals.length >= 2) break; }
+                        let firstPrevHtml = formatSignalCell(validSignals[0], true); let secondPrevHtml = formatSignalCell(validSignals[1], false); let sigName = getSignalNameForStop(i);
+                        let row = `<tr><td style="font-size:10px;"><b>${stopCount}</b><br>${sigName}</td> <td>${currentPath[i].time}</td> <td>${secondPrevHtml}</td> <td>${firstPrevHtml}</td><td>${typeof s1000 === 'number' ? Math.round(s1000) : s1000}</td> <td>${typeof s800 === 'number' ? Math.round(s800) : s800}</td><td>${typeof s500 === 'number' ? Math.round(s500) : s500}</td> <td>${typeof s100 === 'number' ? Math.round(s100) : s100}</td></tr>`;
+                        tbody.innerHTML += row; isStopped = true;
+                    }
+                } else { isStopped = false; }
+            }
+        }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+        window.onclick = function(event) { if (event.target == document.getElementById('chartModal')) { closeModal('chartModal'); } if (event.target == document.getElementById('tableModal')) { closeModal('tableModal'); } if (event.target == document.getElementById('fullGraphModal')) { closeModal('fullGraphModal'); } if (event.target == document.getElementById('crewModal')) { closeModal('crewModal'); } if (event.target == document.getElementById('cautionModal')) { closeModal('cautionModal'); } }
+    </script>
+</body>
+</html>
