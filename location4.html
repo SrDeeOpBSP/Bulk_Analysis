@@ -173,15 +173,15 @@
         </div>
 
         <div class="section">
-            <label>2b. Upload Mast Data (Lat/Long)</label>
+            <label>2b. Upload Mast Data (Optional)</label>
             <input type="file" id="mastUpload" accept=".xlsx, .csv" />
-            <div id="mastStatus" style="font-size:11px; color:#bbb;">Waiting...</div>
+            <div id="mastStatus" style="font-size:11px; color:#bbb;">Not Uploaded (Optional)</div>
         </div>
 
         <div class="section">
-            <label>2c. Upload Caution Order (CD)</label>
+            <label>2c. Upload Caution Order (Optional)</label>
             <input type="file" id="cdUpload" accept=".xlsx, .csv" />
-            <div id="cdStatus" style="font-size:11px; color:#bbb;">Waiting...</div>
+            <div id="cdStatus" style="font-size:11px; color:#bbb;">Not Uploaded (Optional)</div>
         </div>
         <div class="section">
             <label>3. Upload Train Log (Data)</label>
@@ -925,16 +925,22 @@
             }
         }
 
-        // --- CAUTION ORDER ANALYSIS LOGIC ---
+        // --- UPDATED CAUTION ORDER ANALYSIS (SAFE MODE) ---
         function analyzeCautionOrders() {
-            if(Object.keys(globalMastData).length === 0 || globalCautionData.length === 0 || currentPath.length === 0) {
-                console.log("Skipping Caution Analysis: Missing Data");
-                return;
+            // Check: Agar Data missing hai, to silently skip karo (Error mat do)
+            if(!globalMastData || Object.keys(globalMastData).length === 0 || 
+               !globalCautionData || globalCautionData.length === 0 || 
+               !currentPath || currentPath.length === 0) {
+                
+                console.log("Skipping Caution Analysis: Optional files not uploaded.");
+                globalCautionAnalysis = []; // Clear old data
+                updateCautionReport(); // UI update karo ki data nahi hai
+                return; // Yahi se wapas jao, aage ka code mat run karo
             }
 
-            globalCautionAnalysis = []; // Clear previous results
+            // Agar data hai, to analysis shuru karo
+            globalCautionAnalysis = []; 
             let trainType = document.getElementById('trainType').value;
-            // Column mapping based on user file headers
             let colName = trainType === 'GOODS' ? 'Goods' : 'Coaching/Memu';
 
             globalCautionData.forEach(cdRow => {
@@ -962,28 +968,19 @@
                                 });
 
                                 let status = "PASS";
-                                // Check Violation (Buffer of 2 Kmph allowed)
                                 if(maxSpeedInZone > limit + 2) {
                                     status = "FAIL";
-                                    // DRAW VIOLATION ON MAP (Red Dashed)
                                     L.polyline(segment, { color: '#ff0000', weight: 6, opacity: 0.8, dashArray: '10, 10' }).addTo(map)
                                      .bindPopup(`<b>⚠️ Caution Violation</b><br>Zone: ${fromMast} to ${toMast}<br>Limit: ${limit} Kmph<br>Actual: ${maxSpeedInZone} Kmph`);
                                 } else {
                                     status = "PASS";
-                                    // DRAW SAFE CAUTION ON MAP (Orange)
                                     L.polyline(segment, { color: '#ffaa00', weight: 5, opacity: 0.6 }).addTo(map)
                                      .bindPopup(`<b>✅ Caution Zone (Safe)</b><br>Zone: ${fromMast} to ${toMast}<br>Limit: ${limit} Kmph<br>Max: ${maxSpeedInZone} Kmph`);
                                 }
 
-                                // ADD TO GLOBAL RESULTS
                                 globalCautionAnalysis.push({
-                                    from: fromMast,
-                                    to: toMast,
-                                    limit: limit,
-                                    actual: maxSpeedInZone,
-                                    startTime: segment[0].time,
-                                    endTime: segment[segment.length-1].time,
-                                    status: status
+                                    from: fromMast, to: toMast, limit: limit, actual: maxSpeedInZone,
+                                    startTime: segment[0].time, endTime: segment[segment.length-1].time, status: status
                                 });
                             }
                         }
@@ -1010,10 +1007,27 @@
 
         function updateCautionReport() {
             let container = document.getElementById('cautionReportContainer');
-            // Update PDF section
-            if(globalCautionAnalysis.length === 0) {
-                container.innerHTML = `<div style="padding:10px; border:1px solid green; color:green;">✅ No Caution Order Data or Zones Found.</div>`;
+            
+            // Agar analysis empty hai (ya file upload nahi hui)
+            if(!globalCautionAnalysis || globalCautionAnalysis.length === 0) {
+                // Check karein ki files upload hui thi ya nahi
+                let missingFiles = [];
+                if(!globalMastData || Object.keys(globalMastData).length === 0) missingFiles.push("Mast Data");
+                if(!globalCautionData || globalCautionData.length === 0) missingFiles.push("Caution Order");
+
+                if(missingFiles.length > 0) {
+                    // Friendly message agar optional files nahi hain
+                    container.innerHTML = `<div style="padding:10px; border:1px dashed #ccc; color:#777; font-style:italic;">
+                        ℹ️ Caution Analysis Skipped (${missingFiles.join(' & ')} not uploaded).
+                    </div>`;
+                } else {
+                    // Files thi par koi zone match nahi hua
+                    container.innerHTML = `<div style="padding:10px; border:1px solid green; color:green;">
+                        ✅ Data Loaded but No Caution Zones found on this route.
+                    </div>`;
+                }
             } else {
+                // Table generation (Same as before)
                 let html = `
                 <table class="report-table">
                     <thead>
@@ -1047,26 +1061,29 @@
         
         function showCautionModal() {
             if(!currentPath || currentPath.length === 0) { alert("Run Analysis First!"); return; }
+            
+            // Check if analysis ran
+            if(!globalCautionAnalysis || globalCautionAnalysis.length === 0) {
+                alert("Caution Analysis not performed (Files missing or no zones found).");
+                return;
+            }
+
             document.getElementById('cautionModal').style.display = 'block';
             let tbody = document.querySelector('#cautionTable tbody');
             tbody.innerHTML = "";
             
-            if(globalCautionAnalysis.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" style="color:#aaa; padding:20px;">No Caution Data found.</td></tr>`;
-            } else {
-                globalCautionAnalysis.forEach(v => {
-                    let statusClass = v.status === "FAIL" ? "status-fail" : "status-pass";
-                    let statusText = v.status === "FAIL" ? "FAIL" : "PASS";
-                    let row = `<tr>
-                        <td>${v.from} ➡ ${v.to}</td>
-                        <td>${v.startTime}</td>
-                        <td>${v.limit}</td>
-                        <td style="font-weight:bold;">${v.actual}</td>
-                        <td class="${statusClass}">${statusText}</td>
-                    </tr>`;
-                    tbody.innerHTML += row;
-                });
-            }
+            globalCautionAnalysis.forEach(v => {
+                let statusClass = v.status === "FAIL" ? "status-fail" : "status-pass";
+                let statusText = v.status === "FAIL" ? "FAIL" : "PASS";
+                let row = `<tr>
+                    <td>${v.from} ➡ ${v.to}</td>
+                    <td>${v.startTime}</td>
+                    <td>${v.limit}</td>
+                    <td style="font-weight:bold;">${v.actual}</td>
+                    <td class="${statusClass}">${statusText}</td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
         }
 
         // --- FULL JOURNEY GRAPH LOGIC (UPDATED WITH IMAGE & TAG) ---
