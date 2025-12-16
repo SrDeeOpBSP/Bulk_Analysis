@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SANKET - QC Mode (Fixed Save/Load)</title>
+    <title>SANKET - QC Mode (Time Fixed)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -510,7 +510,6 @@
         var globalMPSUsed = 0;
         
         // --- DEFINING THE SIGNAL ICON (SVG DATA URI) ---
-        // This creates a reusable Railway Signal Icon (Red/Yellow/Green vertical box)
         const signalSvgData = "data:image/svg+xml;base64," + btoa(`
         <svg width="30" height="50" viewBox="0 0 30 50" xmlns="http://www.w3.org/2000/svg">
           <rect x="13" y="20" width="4" height="30" fill="#666" stroke="#333" stroke-width="1"/>
@@ -633,8 +632,20 @@
             });
         }
 
+        // --- TIME FORMATTING FIX (UTC Extraction to avoid Local Timezone Shift) ---
         function formatExcelTime(val) {
-            if (typeof val === 'number') return new Date(Math.round((val - 25569)*86400*1000)).toLocaleTimeString();
+            if (typeof val === 'number') {
+                // Convert Excel Serial Date to JS Date (UTC)
+                let date = new Date(Math.round((val - 25569) * 86400 * 1000));
+                
+                // Extract UTC components to keep exact Excel time
+                let h = date.getUTCHours();
+                let m = date.getUTCMinutes();
+                let s = date.getUTCSeconds();
+                
+                // Pad with zeros
+                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            }
             return val;
         }
 
@@ -671,7 +682,8 @@
                     try {
                         let data = new Uint8Array(e.target.result);
                         let wb = XLSX.read(data, {type: 'array'});
-                        let jsonData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                        // Ensure raw parsing for numbers to fix time
+                        let jsonData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: true });
                         
                         if (jsonData.length > 0) {
                             identifyAndAssignData(jsonData, file.name);
@@ -802,7 +814,8 @@
             var reader = new FileReader();
             reader.onload = function(e) {
                 var wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
-                globalTrainData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false });
+                // RAW TRUE IMPORTANT FOR TIME FIX
+                globalTrainData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: true });
                 if(globalTrainData.length > 0) populateStationDropdowns(globalTrainData);
             };
             reader.readAsArrayBuffer(file);
