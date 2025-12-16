@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SANKET - QC Mode (Signal Icon Fixed)</title>
+    <title>SANKET - QC Mode (Fixed Save/Load)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -143,7 +143,7 @@
         <h3>🚆 SANKET - QC Mode</h3>
         
         <div class="section" style="border-top: 1px solid #555; padding-top: 10px; margin-bottom: 10px;">
-            <label style="color: #ffd700;">📂 Project Share</label>
+            <label style="color: #ffd700;">📂 Project Share (Fixed)</label>
             <div style="display:flex; gap: 5px;">
                 <button onclick="saveProject()" class="btn-save">💾 Save</button>
                 <button onclick="document.getElementById('projectUpload').click()" class="btn-save">📂 Open</button>
@@ -861,7 +861,12 @@
         }
 
         function processRun(trainData) {
-            map.eachLayer(layer => { if (!layer._url && !layer._layers) map.removeLayer(layer); });
+            // FIX: Be cleaner with layer removal to keep tiles
+            map.eachLayer(layer => { 
+                if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+                    map.removeLayer(layer); 
+                }
+            });
             overspeedLayerGroup.clearLayers(); 
             overspeedLayerGroup.addTo(map);
 
@@ -1181,43 +1186,86 @@
         }
         function resetFullGraphZoom() { if(fullJourneyChartInstance) fullJourneyChartInstance.resetZoom(); }
 
-        // --- SAVE & LOAD PROJECT ---
+        // --- SAVE & LOAD PROJECT (FIXED) ---
         function saveProject() {
             if (!currentPath || currentPath.length === 0) { alert("Analysis First!"); return; }
             const projectData = {
-                version: "1.0",
+                version: "1.1", // Bumped version
                 date: new Date().toISOString(),
                 meta: { fromStation: document.getElementById('fromStation').value, toStation: document.getElementById('toStation').value, trainType: document.getElementById('trainType').value },
                 pathData: currentPath.map(p => ({ lat: p.lat, lng: p.lng, speed: p.speed, time: p.time })),
-                signals: loadedSignals, snapshots: reportSnapshots, overspeedList: globalOverspeedList, mpsUsed: globalMPSUsed, bftStatus: globalBftText, bptStatus: globalBptText
+                signals: loadedSignals, 
+                mastData: globalMastData, // FIX: Saving Mast Data
+                cautionData: globalCautionData, // FIX: Saving Caution Data
+                cautionAnalysis: globalCautionAnalysis, // FIX: Saving Caution Analysis Results
+                snapshots: reportSnapshots, 
+                overspeedList: globalOverspeedList, 
+                mpsUsed: globalMPSUsed, 
+                bftStatus: globalBftText, 
+                bptStatus: globalBptText
             };
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(projectData));
-            const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", `SANKET_Analysis.json`);
+            const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", `SANKET_Analysis_V2.json`);
             document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove();
         }
+        
         function loadProject(input) {
             const file = input.files[0]; if (!file) return;
             const reader = new FileReader();
             reader.onload = function(e) { try { const data = JSON.parse(e.target.result); restoreProject(data); } catch (err) { console.error(err); alert("Error!"); } input.value = ''; };
             reader.readAsText(file);
         }
+        
         function restoreProject(data) {
             document.getElementById('status').innerText = "Restoring Project...";
-            if(document.getElementById('fromStation').options.length === 0) {
-                let fromSel = document.getElementById('fromStation'); let toSel = document.getElementById('toStation');
-                fromSel.innerHTML = `<option>${data.meta.fromStation}</option>`; toSel.innerHTML = `<option>${data.meta.toStation}</option>`;
-            } else { document.getElementById('fromStation').value = data.meta.fromStation; document.getElementById('toStation').value = data.meta.toStation; }
+            
+            // Restore Dropdowns
+            let fromSel = document.getElementById('fromStation'); 
+            let toSel = document.getElementById('toStation');
+            fromSel.innerHTML = `<option value="${data.meta.fromStation}">${data.meta.fromStation}</option>`; 
+            toSel.innerHTML = `<option value="${data.meta.toStation}">${data.meta.toStation}</option>`;
+            fromSel.value = data.meta.fromStation;
+            toSel.value = data.meta.toStation;
+            document.getElementById('stationSelectDiv').style.display = 'block';
+
             document.getElementById('trainType').value = data.meta.trainType || "GOODS";
-            loadedSignals = data.signals || []; reportSnapshots = data.snapshots || []; globalOverspeedList = data.overspeedList || []; globalMPSUsed = data.mpsUsed || 0;
-            globalBftText = data.bftStatus || "NOT DONE"; globalBptText = data.bptStatus || "NOT DONE";
+            
+            // Restore Data
+            loadedSignals = data.signals || []; 
+            globalMastData = data.mastData || {}; // FIX: Load Mast Data
+            globalCautionData = data.cautionData || []; // FIX: Load Caution Data
+            globalCautionAnalysis = data.cautionAnalysis || [];
+            
+            reportSnapshots = data.snapshots || []; 
+            globalOverspeedList = data.overspeedList || []; 
+            globalMPSUsed = data.mpsUsed || 0;
+            globalBftText = data.bftStatus || "NOT DONE"; 
+            globalBptText = data.bptStatus || "NOT DONE";
+            
             document.getElementById('snapCount').innerText = `Snapshots taken: ${reportSnapshots.length}`;
+            document.getElementById('mastStatus').innerText = `✅ Restored ${Object.keys(globalMastData).length} Masts`;
+            document.getElementById('cdStatus').innerText = `✅ Restored ${globalCautionData.length} Cautions`;
+            document.getElementById('mastStatus').style.color = '#00ff88';
+            document.getElementById('cdStatus').style.color = '#00ff88';
+
             currentPath = data.pathData.map(p => { let point = L.latLng(p.lat, p.lng); point.speed = p.speed; point.time = p.time; return point; });
-            map.eachLayer(layer => { if (!layer._url && !layer._layers) map.removeLayer(layer); });
-            overspeedLayerGroup.clearLayers(); overspeedLayerGroup.addTo(map);
+            
+            // Clear Map Safely
+            map.eachLayer(layer => { 
+                if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+                    map.removeLayer(layer); 
+                }
+            });
+            overspeedLayerGroup.clearLayers(); 
+            overspeedLayerGroup.addTo(map);
+
             if (currentPath.length > 0) {
                 var polyline = L.polyline(currentPath, { color: '#ff3333', weight: 4, opacity: 0.6 }).addTo(map); map.fitBounds(polyline.getBounds());
                 L.marker(currentPath[0], {icon: startIcon}).addTo(map).bindPopup("Start"); L.marker(currentPath[currentPath.length - 1], {icon: endIcon}).addTo(map).bindPopup("End");
+                
                 if (loadedSignals.length > 0) { filterAndMatchSignals(loadedSignals, currentPath); } else { matchedSignalsGlobal = []; }
+                
+                // Re-add Stop Markers
                 let isStopped = false; let stopCounter = 0;
                 currentPath.forEach((pt, idx) => {
                     if (pt.speed === 0) {
@@ -1230,11 +1278,22 @@
                         }
                     } else { isStopped = false; }
                 });
+
                 analyzeBrakeTests(currentPath);
+
+                // FIX: Re-run Caution Analysis to paint map lines if data exists
+                if(Object.keys(globalMastData).length > 0 && globalCautionData.length > 0) {
+                    analyzeCautionOrders();
+                }
+
                 if(globalOverspeedList.length > 0 && globalMPSUsed > 0) { document.getElementById('mpsSelect').value = globalMPSUsed; }
+                
                 document.getElementById('analysisButtons').style.display = 'block';
-                document.getElementById('status').innerText = "✅ Project Loaded Successfully."; document.getElementById('status').style.color = '#00ff88';
+                document.getElementById('status').innerText = "✅ Project Restored Fully."; document.getElementById('status').style.color = '#00ff88';
+                
+                // Update text reports
                 let osContainer = document.getElementById('overspeedReportContainer'); if(globalOverspeedList.length > 0) { osContainer.innerHTML = `<div style="color: green; padding:10px; border:1px solid green;">Data loaded. Click 'Generate PDF' to view tables.</div>`; }
+                updateCautionReport();
             }
         }
 
