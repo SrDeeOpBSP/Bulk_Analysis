@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulk Signal Analysis Dashboard (Multi-Time Fix)</title>
+    <title>Bulk Signal Analysis Dashboard (Bidirectional Time Fix)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
@@ -36,7 +36,7 @@
         /* --- Header & Summary --- */
         .dashboard-header {
             display: flex;
-            justify-content: space-between; /* Pushes Title left, Controls right */
+            justify-content: space-between;
             align-items: center;
             background: var(--header-bg);
             padding: 10px 20px;
@@ -47,14 +47,12 @@
 
         h1 { margin: 0; font-size: 1.2rem; color: var(--primary-bg); }
 
-        /* Right side container for Stats and Button */
         .header-controls {
             display: flex;
             align-items: center;
             gap: 15px;
         }
 
-        /* New Navigation Button Style */
         .nav-btn {
             background-color: var(--primary-bg);
             color: white;
@@ -69,9 +67,7 @@
             gap: 6px;
             white-space: nowrap;
         }
-        .nav-btn:hover {
-            background-color: var(--accent-color);
-        }
+        .nav-btn:hover { background-color: var(--accent-color); }
 
         .summary-bar {
             display: flex; gap: 20px; padding: 5px 15px;
@@ -117,7 +113,7 @@
         }
         button#runBtn:disabled { background: #94a3b8; cursor: not-allowed; }
 
-        /* --- Table & Excel Filters --- */
+        /* --- Table --- */
         .main-content {
             background: var(--header-bg); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden;
         }
@@ -131,7 +127,6 @@
         }
         thead th:hover { background-color: #e2e8f0; }
 
-        /* Filter Icons */
         .th-content { display: flex; justify-content: space-between; align-items: center; }
         .filter-icon { font-size: 10px; margin-left: 5px; color: #94a3b8; }
         .filter-active .filter-icon { color: var(--accent-color); font-weight: bold; }
@@ -143,17 +138,14 @@
         }
         .filter-search { padding: 8px; border-bottom: 1px solid #f1f5f9; }
         .filter-search input { width: 100%; padding: 5px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 12px; }
-        
         .filter-items { overflow-y: auto; flex-grow: 1; padding: 5px; }
         .filter-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
         .filter-item:hover { background-color: #f8fafc; }
-        
         .filter-actions { padding: 8px; border-top: 1px solid #f1f5f9; display: flex; justify-content: space-between; }
         .filter-btn { padding: 4px 10px; font-size: 11px; border-radius: 4px; cursor: pointer; border: none; }
         .btn-apply { background: var(--accent-color); color: white; }
         .btn-clear { background: #f1f5f9; color: #64748b; }
 
-        /* Table Body */
         tbody td { padding: 8px 12px; border-bottom: 1px solid var(--border-color); color: var(--text-main); }
         tbody tr:hover { background-color: #f8fafc; }
         tr.violation-row { background-color: var(--violation-bg) !important; }
@@ -166,8 +158,6 @@
         }
         input[type="file"] { display: none; }
         .download-btn { margin-left: auto; background: #10b981; color: white; text-decoration: none; padding: 5px 15px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
-        
-        /* Overlay to close menu */
         #filter-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 99; display: none; }
     </style>
 </head>
@@ -176,8 +166,7 @@
     <div id="filter-overlay"></div>
 
     <div class="dashboard-header">
-        <h1>🚂 BULK SIGNAL ANALYSIS</h1>
-        
+        <h1>🚂 BULK SIGNAL ANALYSIS (Bidirectional Time Fix)</h1>
         <div class="header-controls">
             <div id="results-area" style="display:none;">
                 <div class="summary-bar">
@@ -188,7 +177,6 @@
                     <a href="#" id="downloadLink" class="download-btn">Download CSV</a>
                 </div>
             </div>
-
             <a href="location4.html" class="nav-btn">RTIS INDIVIDUAL ANALYSIS ➜</a>
         </div>
     </div>
@@ -211,7 +199,7 @@
             </div>
             <hr style="border:0; border-top:1px solid #e2e8f0; width:100%;">
             <div class="control-group">
-                <label>Time Window (+Sec)</label>
+                <label>Time Window (+/- Sec)</label>
                 <input type="number" id="timeWindow" value="60" min="10" max="300">
             </div>
             <div class="control-group">
@@ -247,27 +235,19 @@
                         </tr>
                     </thead>
                     <tbody id="tableBody">
-                        <tr>
-                            <td colspan="14" style="text-align:center; padding: 50px; color: #94a3b8;">
-                                Data will appear here after analysis...
-                            </td>
-                        </tr>
+                        <tr><td colspan="14" style="text-align:center; padding: 50px; color: #94a3b8;">Data will appear here after analysis...</td></tr>
                     </tbody>
                 </table>
             </div>
             
             <div id="filterMenu" class="filter-dropdown">
-                <div class="filter-search">
-                    <input type="text" id="filterSearchInput" placeholder="Search..." onkeyup="filterListItems()">
-                </div>
-                <div class="filter-items" id="filterList">
-                    </div>
+                <div class="filter-search"><input type="text" id="filterSearchInput" placeholder="Search..." onkeyup="filterListItems()"></div>
+                <div class="filter-items" id="filterList"></div>
                 <div class="filter-actions">
                     <button class="filter-btn btn-apply" onclick="applyFilter()">Apply</button>
                     <button class="filter-btn btn-clear" onclick="clearFilter()">Clear</button>
                 </div>
             </div>
-
         </div>
     </div>
 
@@ -285,160 +265,97 @@
     let activeFilters = {}; 
     let currentFilterColumn = null; 
 
-    // --- EXCEL FILTER LOGIC (Standard) ---
+    // --- FILTER LOGIC ---
     function toggleFilter(event, key) {
         event.stopPropagation();
         const menu = document.getElementById('filterMenu');
         const overlay = document.getElementById('filter-overlay');
         const rect = event.currentTarget.getBoundingClientRect();
-
-        if (currentFilterColumn === key && menu.style.display === 'flex') {
-            closeFilterMenu();
-            return;
-        }
-
+        if (currentFilterColumn === key && menu.style.display === 'flex') { closeFilterMenu(); return; }
         currentFilterColumn = key;
-        menu.style.top = (rect.bottom + 2) + 'px';
-        menu.style.left = rect.left + 'px';
-        menu.style.display = 'flex';
-        overlay.style.display = 'block';
+        menu.style.top = (rect.bottom + 2) + 'px'; menu.style.left = rect.left + 'px';
+        menu.style.display = 'flex'; overlay.style.display = 'block';
         populateFilterList(key);
     }
-
     function populateFilterList(key) {
         const listContainer = document.getElementById('filterList');
-        listContainer.innerHTML = '';
-        document.getElementById('filterSearchInput').value = '';
-
+        listContainer.innerHTML = ''; document.getElementById('filterSearchInput').value = '';
         const uniqueValues = new Set();
         globalResults.forEach(row => {
-            let val = row[key];
-            if (val === undefined || val === null) val = "(Blanks)";
+            let val = row[key]; if (val === undefined || val === null) val = "(Blanks)";
             uniqueValues.add(val.toString());
         });
-        
         const sortedValues = Array.from(uniqueValues).sort();
-
         const divAll = document.createElement('div');
         divAll.className = 'filter-item';
         divAll.innerHTML = `<input type="checkbox" id="selectAll" checked> <b>(Select All)</b>`;
         divAll.onclick = (e) => { 
-            if(e.target.tagName !== 'INPUT') { 
-                const cb = divAll.querySelector('input'); cb.checked = !cb.checked; toggleSelectAll(cb.checked); 
-            } else { toggleSelectAll(e.target.checked); }
+            if(e.target.tagName !== 'INPUT') { const cb = divAll.querySelector('input'); cb.checked = !cb.checked; toggleSelectAll(cb.checked); } 
+            else { toggleSelectAll(e.target.checked); }
         };
         listContainer.appendChild(divAll);
-
         const activeSet = activeFilters[key];
-
         sortedValues.forEach(val => {
-            const div = document.createElement('div');
-            div.className = 'filter-item';
+            const div = document.createElement('div'); div.className = 'filter-item';
             const isChecked = activeSet ? activeSet.has(val) : true;
             div.innerHTML = `<input type="checkbox" class="val-cb" value="${val}" ${isChecked ? 'checked' : ''}> <span>${val}</span>`;
             div.onclick = (e) => { 
-                if(e.target.tagName !== 'INPUT') { 
-                    const cb = div.querySelector('input'); cb.checked = !cb.checked; checkSelectAllStatus();
-                } else { checkSelectAllStatus(); }
+                if(e.target.tagName !== 'INPUT') { const cb = div.querySelector('input'); cb.checked = !cb.checked; checkSelectAllStatus(); } 
+                else { checkSelectAllStatus(); }
             };
             listContainer.appendChild(div);
         });
-        
         checkSelectAllStatus();
     }
-
     function toggleSelectAll(checked) {
-        const checkboxes = document.querySelectorAll('.val-cb');
-        checkboxes.forEach(cb => {
-            if(cb.closest('.filter-item').style.display !== 'none') cb.checked = checked;
-        });
+        document.querySelectorAll('.val-cb').forEach(cb => { if(cb.closest('.filter-item').style.display !== 'none') cb.checked = checked; });
     }
-
     function checkSelectAllStatus() {
         const checkboxes = Array.from(document.querySelectorAll('.val-cb')).filter(cb => cb.closest('.filter-item').style.display !== 'none');
-        const allChecked = checkboxes.every(cb => cb.checked);
-        document.getElementById('selectAll').checked = allChecked;
+        document.getElementById('selectAll').checked = checkboxes.every(cb => cb.checked);
     }
-
     function filterListItems() {
         const term = document.getElementById('filterSearchInput').value.toLowerCase();
-        const items = document.querySelectorAll('#filterList .filter-item');
-        
-        items.forEach((item, index) => {
+        document.querySelectorAll('#filterList .filter-item').forEach((item, index) => {
             if(index === 0) return;
             const text = item.querySelector('span').innerText.toLowerCase();
-            if (text.includes(term)) item.style.display = 'flex';
-            else item.style.display = 'none';
+            item.style.display = text.includes(term) ? 'flex' : 'none';
         });
     }
-
     function applyFilter() {
         const checkboxes = document.querySelectorAll('.val-cb');
         const selectedValues = new Set();
-        
-        checkboxes.forEach(cb => {
-            if(cb.checked) selectedValues.add(cb.value);
-        });
-
-        if (selectedValues.size === checkboxes.length) {
-            delete activeFilters[currentFilterColumn];
-        } else {
-            activeFilters[currentFilterColumn] = selectedValues;
-        }
-
-        renderTable();
-        closeFilterMenu();
-        updateFilterIcons();
+        checkboxes.forEach(cb => { if(cb.checked) selectedValues.add(cb.value); });
+        if (selectedValues.size === checkboxes.length) delete activeFilters[currentFilterColumn];
+        else activeFilters[currentFilterColumn] = selectedValues;
+        renderTable(); closeFilterMenu(); updateFilterIcons();
     }
-
-    function clearFilter() {
-        delete activeFilters[currentFilterColumn];
-        renderTable();
-        closeFilterMenu();
-        updateFilterIcons();
-    }
-
+    function clearFilter() { delete activeFilters[currentFilterColumn]; renderTable(); closeFilterMenu(); updateFilterIcons(); }
     function closeFilterMenu() {
-        document.getElementById('filterMenu').style.display = 'none';
-        document.getElementById('filter-overlay').style.display = 'none';
-        currentFilterColumn = null;
+        document.getElementById('filterMenu').style.display = 'none'; document.getElementById('filter-overlay').style.display = 'none'; currentFilterColumn = null;
     }
-    
     document.getElementById('filter-overlay').addEventListener('click', closeFilterMenu);
-
     function updateFilterIcons() {
-        const headers = document.querySelectorAll('thead th');
-        headers.forEach(th => {
+        document.querySelectorAll('thead th').forEach(th => {
             const key = th.getAttribute('onclick').match(/'([^']+)'/)[1];
-            if (activeFilters[key]) th.classList.add('filter-active');
-            else th.classList.remove('filter-active');
+            if (activeFilters[key]) th.classList.add('filter-active'); else th.classList.remove('filter-active');
         });
     }
 
     function renderTable() {
-        const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = '';
-        
+        const tbody = document.getElementById('tableBody'); tbody.innerHTML = '';
         const filteredData = globalResults.filter(row => {
             for (const key in activeFilters) {
-                let val = row[key];
-                if (val === undefined || val === null) val = "(Blanks)";
+                let val = row[key]; if (val === undefined || val === null) val = "(Blanks)";
                 if (!activeFilters[key].has(val.toString())) return false;
             }
             return true;
         });
-
         updateStats(filteredData);
-
-        if(filteredData.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="14" style="text-align:center; padding: 20px;">No matching records found</td></tr>`;
-            return;
-        }
-
+        if(filteredData.length === 0) { tbody.innerHTML = `<tr><td colspan="14" style="text-align:center; padding: 20px;">No matching records found</td></tr>`; return; }
         filteredData.forEach(row => {
             const tr = document.createElement('tr');
             if (row.Conclusion === 'VIOLATION') tr.classList.add('violation-row');
-            
             tr.innerHTML = `
                 <td>${row.Device_ID}</td><td>${row.Loco_No}</td><td>${row.Station}</td>
                 <td>${row.RTIS_Time}</td><td>${row.Signal_Time}</td><td>${row.Speed}</td>
@@ -457,32 +374,25 @@
             else if (d.Conclusion === 'Complied') stats.complied++;
             else stats.clear++;
         });
-
         document.getElementById('val-total').innerText = stats.total;
         document.getElementById('val-violations').innerText = stats.violations;
         document.getElementById('val-complied').innerText = stats.complied;
         document.getElementById('val-clear').innerText = stats.clear;
-        
         updateCSVDownload(data);
     }
-
     function updateCSVDownload(data) {
         if(!data.length) return;
         const headers = Object.keys(data[0]);
         const csv = [headers.join(',')].concat(data.map(row => Object.values(row).map(v=>`"${v}"`).join(','))).join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
-        const a = document.getElementById('downloadLink');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'Filtered_Analysis.csv';
+        const a = document.getElementById('downloadLink'); a.href = URL.createObjectURL(blob); a.download = 'Filtered_Analysis.csv';
     }
 
-
-    // --- PROCESSING LOGIC ---
+    // --- PARSERS ---
     function parseCSVLine(text) {
-        const result = [];
-        let start = 0; let inQuotes = false;
+        const result = []; let start = 0; let inQuotes = false;
         for (let i = 0; i < text.length; i++) {
-            if (text[i] === '"') { inQuotes = !inQuotes; } 
+            if (text[i] === '"') inQuotes = !inQuotes;
             else if (text[i] === ',' && !inQuotes) {
                 let val = text.substring(start, i);
                 if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
@@ -494,7 +404,6 @@
         result.push(lastVal);
         return result;
     }
-
     function parseStandardCSV(text, type) {
         let lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
         if (lines.length === 0) return null;
@@ -521,20 +430,15 @@
         }
         return data;
     }
-
     function parseCrewCSV(text) {
         let lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
-        const data = [];
-        if (lines.length === 0) return data;
+        const data = []; if (lines.length === 0) return data;
         let headerIndex = -1; let headers = [];
         for (let i = 0; i < Math.min(10, lines.length); i++) {
-            const cols = parseCSVLine(lines[i]);
-            const lower = cols.map(c => c.toLowerCase());
-            const hasCrew = lower.some(c => c.includes('crew id') || c.includes('lp id'));
-            const hasLoco = lower.some(c => c.includes('loco'));
-            if (hasCrew && hasLoco) { headerIndex = i; headers = cols; break; }
+            const cols = parseCSVLine(lines[i]); const lower = cols.map(c => c.toLowerCase());
+            if (lower.some(c => c.includes('crew id') || c.includes('lp id')) && lower.some(c => c.includes('loco'))) { headerIndex = i; headers = cols; break; }
         }
-        if (headerIndex === -1) {
+        if (headerIndex === -1) { // Fallback
             for (let i = 2; i < lines.length; i++) {
                 const line = lines[i].trim(); if (!line) continue;
                 const cols = parseCSVLine(line); if (cols.length < 15) continue;
@@ -632,22 +536,12 @@
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
-    // --- UPDATED DATE PARSING (Handles Colon Milliseconds & Multiple Formats) ---
     function parseUniversalDate(str) {
         if (!str) return null;
         str = str.replace(/"/g, '').trim();
-
-        // Fix for format seen in image: 12/10/2025 22:29:24:812 (colon before ms)
-        // Convert last colon to dot for standard parsing if it looks like milliseconds
-        if (/\d{2}:\d{2}:\d{2}:\d{3}/.test(str)) {
-            str = str.replace(/(:)(\d{3})$/, '.$2');
-        }
-
-        // Try standard Date parsing first
+        if (/\d{2}:\d{2}:\d{2}:\d{3}/.test(str)) str = str.replace(/(:)(\d{3})$/, '.$2');
         let d = new Date(str);
         if (!isNaN(d.getTime())) return d;
-
-        // Fallback for DD/MM/YYYY with AM/PM
         const m = str.match(/(\d+)\/(\d+)\/(\d+),\s*(\d+):(\d+):(\d+)\s*(AM|PM)/i);
         if (m) {
             let h = parseInt(m[4]); 
@@ -655,18 +549,13 @@
             if (m[7].toUpperCase() === "AM" && h === 12) h = 0;
             return new Date(parseInt(m[3]), parseInt(m[1])-1, parseInt(m[2]), h, parseInt(m[5]), parseInt(m[6]));
         }
-
-        // Fallback for Indian format DD/MM/YYYY HH:mm:ss
         const p = str.split(' ');
         if (p.length >= 2) {
-            const dateParts = p[0].split(/[-/]/);
-            const timeParts = p[1].split(':');
+            const dateParts = p[0].split(/[-/]/); const timeParts = p[1].split(':');
             if (dateParts.length === 3 && timeParts.length >= 3) {
-                // Assuming DD/MM/YYYY
                 return new Date(dateParts[2], dateParts[1]-1, dateParts[0], timeParts[0], timeParts[1], timeParts[2].split('.')[0]);
             }
         }
-        
         return null;
     }
 
@@ -675,14 +564,12 @@
         const signalTime = signalDateObj.getTime();
         const cleanRTIS = (locoNumber || "").replace(/\D/g, '').trim();
         if (!cleanRTIS) return { id: "NF", name: "-", train: "-", type: "-" };
-
         for (let row of rawData.crew) {
             const cleanCrew = (row.LOCO_NO || "").replace(/\D/g, '').trim();
             if (!cleanCrew) continue;
             const matchLoco = cleanCrew === cleanRTIS || (cleanCrew.length >= 4 && (cleanCrew.endsWith(cleanRTIS) || cleanRTIS.endsWith(cleanCrew)));
             if (!matchLoco) continue;
-            const dept = parseIndianDateTime(row.DEPARTURE);
-            const arr = parseIndianDateTime(row.ARRIVAL);
+            const dept = parseIndianDateTime(row.DEPARTURE); const arr = parseIndianDateTime(row.ARRIVAL);
             if (!dept || !arr) continue;
             if (signalTime >= dept.getTime() && signalTime <= arr.getTime()) {
                 let trainType = "Goods";
@@ -694,12 +581,9 @@
         }
         return { id: "NF", name: "-", train: "-", type: "-" };
     }
-
-    // Helper for Crew dates only
     function parseIndianDateTime(str) {
         if (!str) return null;
-        const p = str.trim().split(' '); 
-        if (p.length < 2) return null;
+        const p = str.trim().split(' '); if (p.length < 2) return null;
         const d = p[0].split(/[-/]/); const t = (p[1]||"00:00:00").split(':');
         return new Date(d[2], d[1]-1, d[0], t[0], t[1], t[2]||0);
     }
@@ -709,46 +593,37 @@
         setTimeout(runAnalysis, 100);
     });
 
-    // ------------------------------------------
-    // --- UPDATED ANALYSIS LOGIC ---
-    // ------------------------------------------
+    // --- MAIN ANALYSIS (Bidirectional Time Fix) ---
     function runAnalysis() {
         const timeWindowSec = parseInt(document.getElementById('timeWindow').value);
         const speedLimit = parseInt(document.getElementById('speedLimit').value);
         const maxErrorDist = parseFloat(document.getElementById('errorDistSlider').value);
         const stationMap = {};
 
-        // 1. Process FSD - EXACT MATCHING based on User Image
+        // 1. Process FSD
         rawData.fsd.forEach(row => {
             const stn = row['Station'] ? row['Station'].trim() : "";
             const rawDir = (row['DIRN']||"").toUpperCase().trim();
-            
             let dirKey = null;
-
             if (rawDir === 'UP MAIN LINE') dirKey = 'UP';
             else if (rawDir === 'DN MAIN LINE') dirKey = 'DN';
             else if (rawDir === 'UP MIDDLE LINE') dirKey = 'UP_MID';
             else if (rawDir === 'DN MIDDLE LINE') dirKey = 'DN_MID';
             else if (['UP OUTER LINE', 'UP FOURTH LINE', 'UP JOINT LINE'].includes(rawDir)) dirKey = 'UMOJT';
             else if (rawDir === 'DN JOINT LINE') dirKey = 'DMOJT';
-
-            const lat = parseFloat(row['Latitude']); 
-            const lon = parseFloat(row['Longitude']);
-            
+            const lat = parseFloat(row['Latitude']); const lon = parseFloat(row['Longitude']);
             if (stn && dirKey && !isNaN(lat)) {
                 if (!stationMap[stn]) stationMap[stn] = {};
                 stationMap[stn][dirKey] = { lat, lon };
             }
         });
 
-        // 2. Helper to Identify Signal Direction based on User Image
+        // 2. Helper
         function getSignalDirection(txt) {
             const umojtList = ['UMOT HOME', 'UMOJT HOME', 'UMOJT', 'UP OUTER HOME', 'UP JONT', 'UP JOINT HOME', 'UP OUTER', 'UP JOINT', 'UP OUETR', 'UP OUTER JOINT'];
             if (umojtList.some(k => txt.includes(k))) return 'UMOJT';
-
             const dmojtList = ['DMOT HOME', 'DMOJT', 'DMOJT HOME', 'DOWN OUTER', 'DOWN JOINT', 'DOWN OUTER JOINT', 'DOWN JOINT HOME', 'DOWN OUTER HOME'];
             if (dmojtList.some(k => txt.includes(k))) return 'DMOJT';
-
             if (txt.includes('UP MID HOME') || txt.includes('UP MIDDLE HOME')) return 'UP_MID';
             if (txt.includes('DOWN MIDDLE HOME') || txt.includes('DOWN MID HOME')) return 'DN_MID';
             if (txt.includes('UP MAIN HOME') || txt.includes('UP HOME')) return 'UP';
@@ -756,38 +631,22 @@
             return null;
         }
 
-        // 3. Process Signals (UPDATED: Handles Multiple Times Separated by Comma)
+        // 3. Process Signals
         const signals = rawData.snt.flatMap(row => {
             let stn = (row['STATION']||"").split(/[-_\s]/)[0].trim();
-            // Information aur Fault Message dono ko combine karke direction check karenge
             let txt = ((row['INFORMATION']||"") + " " + (row['FAULT MESSAGE']||"")).toUpperCase();
-            
             let dir = getSignalDirection(txt);
-
-            // Time column extraction (Try multiple column names)
             let rawTimeStr = row['OCCURED TIME'] || row['TIMEDETAILS'] || row['Time Detail'] || "";
-            
-            // Step: Split multiple times by comma (,)
-            // Example: "time1 , time2" -> ["time1", "time2"]
             let timeEntries = rawTimeStr.split(',').map(t => t.trim()).filter(t => t !== "");
-
-            // Agar direction nahi mili ya time nahi hai to skip karo
             if (!dir || timeEntries.length === 0) return [];
-
-            // Har ek time ke liye ek alag signal object banao
             return timeEntries.map(timeStr => {
-                return { 
-                    station: stn, 
-                    dir: dir, 
-                    time: parseUniversalDate(timeStr) 
-                };
+                return { station: stn, dir: dir, time: parseUniversalDate(timeStr) };
             });
-
         }).filter(s => s.time && s.dir && !isNaN(s.time.getTime()));
 
         let results = [];
         
-        // 4. Main Matching Loop
+        // 4. Match
         rawData.rtis.forEach(train => {
             const stn = (train['Station']||"").trim();
             const lat = parseFloat(train['Lattitude'] || train['Latitude']);
@@ -797,58 +656,38 @@
             const loco = train['Loco No.'] || "";
             
             if (!stn || isNaN(lat) || !time) return;
-            
-            const stationLocs = stationMap[stn];
-            if (!stationLocs) return; 
+            const stationLocs = stationMap[stn]; if (!stationLocs) return; 
 
-            // Calculate distance to ALL available lines
-            let closestDir = null;
-            let minDistance = Infinity;
-
+            let closestDir = null; let minDistance = Infinity;
             for (const [dirKey, coords] of Object.entries(stationLocs)) {
                 const d = haversine(lat, lon, coords.lat, coords.lon);
-                if (d < minDistance) {
-                    minDistance = d;
-                    closestDir = dirKey;
-                }
+                if (d < minDistance) { minDistance = d; closestDir = dirKey; }
             }
 
             if (minDistance > maxErrorDist || !closestDir) return;
 
-            const tStart = time.getTime();
-            const tEnd = tStart + (timeWindowSec * 1000);
+            // --- FIX IS HERE: BIDIRECTIONAL TIME WINDOW ---
+            const tStart = time.getTime() - (timeWindowSec * 1000); // Look Backward
+            const tEnd = time.getTime() + (timeWindowSec * 1000);   // Look Forward
             
             let searchDirs = [];
-            if (['UP', 'UP_MID', 'UMOJT'].includes(closestDir)) {
-                searchDirs = ['UP', 'UP_MID', 'UMOJT']; 
-            } else {
-                searchDirs = ['DN', 'DN_MID', 'DMOJT'];
-            }
+            if (['UP', 'UP_MID', 'UMOJT'].includes(closestDir)) searchDirs = ['UP', 'UP_MID', 'UMOJT']; 
+            else searchDirs = ['DN', 'DN_MID', 'DMOJT'];
 
-            // Find all potential matches in time window
             let possibleMatches = signals.filter(s => 
-                s.station === stn && 
-                searchDirs.includes(s.dir) && 
-                s.time.getTime() >= tStart && 
-                s.time.getTime() <= tEnd
+                s.station === stn && searchDirs.includes(s.dir) && 
+                s.time.getTime() >= tStart && s.time.getTime() <= tEnd
             );
 
-            // Pick the best match
             let match = possibleMatches.find(s => s.dir === closestDir);
             if (!match && possibleMatches.length > 0) match = possibleMatches[0];
 
-            let aspect = "Clear";
-            let conclusion = "Clear";
-            let sigTimeStr = "-";
-            let sigTimeObj = null;
+            let aspect = "Clear"; let conclusion = "Clear"; let sigTimeStr = "-"; let sigTimeObj = null;
 
             if (match) {
-                aspect = "Single Yellow"; // Assuming any log entry implies a yellow/restrictive aspect
-                sigTimeStr = match.time.toLocaleTimeString();
-                sigTimeObj = match.time;
-                
-                if (speed > speedLimit) { conclusion = "VIOLATION"; }
-                else { conclusion = "Complied"; }
+                aspect = "Single Yellow"; 
+                sigTimeStr = match.time.toLocaleTimeString(); sigTimeObj = match.time;
+                if (speed > speedLimit) conclusion = "VIOLATION"; else conclusion = "Complied";
             } 
 
             const crew = findCrewDetails(loco, sigTimeObj || time);
@@ -856,22 +695,16 @@
                 Device_ID: train['Device Id']||"", Loco_No: loco, Station: stn,
                 RTIS_Time: time.toLocaleTimeString(), Signal_Time: sigTimeStr,
                 Speed: speed, Direction: match ? match.dir : closestDir, 
-                Aspect: aspect,
-                Conclusion: conclusion, Error_Distance_KM: minDistance,
+                Aspect: aspect, Conclusion: conclusion, Error_Distance_KM: minDistance,
                 LP_ID: crew.id, LP_Name: crew.name, Train_No: crew.train, Train_Type: crew.type
             });
         });
 
         results.sort((a,b) => (a.Conclusion === 'VIOLATION' ? -1 : 1) - (b.Conclusion === 'VIOLATION' ? -1 : 1));
-
-        globalResults = results;
-        activeFilters = {}; 
-        renderTable();
-
+        globalResults = results; activeFilters = {}; renderTable();
         document.getElementById('loading').style.display = 'none';
         document.getElementById('results-area').style.display = 'block';
     }
 </script>
-
 </body>
 </html>
