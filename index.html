@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulk Signal Analysis Dashboard (Bidirectional Time Fix)</title>
+    <title>Bulk Signal Analysis Dashboard (CMS Compatible)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
@@ -166,7 +166,7 @@
     <div id="filter-overlay"></div>
 
     <div class="dashboard-header">
-        <h1>🚂 BULK SIGNAL ANALYSIS</h1>
+        <h1>🚂 BULK SIGNAL ANALYSIS (Bidirectional Time Fix)</h1>
         <div class="header-controls">
             <div id="results-area" style="display:none;">
                 <div class="summary-bar">
@@ -185,7 +185,7 @@
         <div class="sidebar">
             <div class="drop-zone" id="main-drop-zone">
                 <h3>📂 Upload Files</h3>
-                <p>Drag RTIS, FSD, SNT, Crew here</p>
+                <p>Drag RTIS, FSD, SNT, CMS(Crew) here</p>
                 <label style="cursor: pointer; color: var(--accent-color); text-decoration: underline; font-size: 0.8rem;">
                     or browse
                     <input type="file" id="file-input" multiple accept=".csv, .xlsx, .xls">
@@ -195,7 +195,7 @@
                 <div id="badge-rtis" class="file-badge"><span>⬜</span> RTIS Data</div>
                 <div id="badge-snt" class="file-badge"><span>⬜</span> Signal Log (SNT)</div>
                 <div id="badge-fsd" class="file-badge"><span>⬜</span> FSD Locations</div>
-                <div id="badge-crew" class="file-badge"><span>⬜</span> Crew (SignOn)</div>
+                <div id="badge-crew" class="file-badge"><span>⬜</span> Crew (CMS)</div>
             </div>
             <hr style="border:0; border-top:1px solid #e2e8f0; width:100%;">
             <div class="control-group">
@@ -404,6 +404,7 @@
         result.push(lastVal);
         return result;
     }
+    
     function parseStandardCSV(text, type) {
         let lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
         if (lines.length === 0) return null;
@@ -430,15 +431,81 @@
         }
         return data;
     }
+
+    // --- REVISED CREW PARSER (CMS REPORT FORMAT) ---
     function parseCrewCSV(text) {
         let lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
-        const data = []; if (lines.length === 0) return data;
+        const data = [];
+        if (lines.length === 0) return data;
+
+        // Try to identify header row by specific CMS Report columns
+        let headerIndex = -1;
+        for (let i = 0; i < Math.min(20, lines.length); i++) {
+            const line = lines[i].toLowerCase();
+            // Matching key columns from the CMS report structure
+            if (line.includes('crew id') && line.includes('train no') && line.includes('loco no')) {
+                headerIndex = i;
+                break;
+            }
+        }
+
+        // --- BACKWARD COMPATIBILITY (If CMS Header not found) ---
+        if (headerIndex === -1) {
+            return parseCrewCSVLegacy(lines);
+        }
+
+        // --- CMS REPORT PARSING ---
+        const headers = parseCSVLine(lines[headerIndex]).map(h => h.toUpperCase().trim());
+        const colMap = {
+            crewId: headers.indexOf('CREW ID'),
+            name: headers.indexOf('NAME'),
+            desig: headers.indexOf('DESIG'),
+            duty: headers.indexOf('DUTY TYPE'),
+            dep: headers.indexOf('DEPARTURE'),
+            arr: headers.indexOf('ARRIVAL'),
+            train: headers.indexOf('TRAIN NO'),
+            loco: headers.indexOf('LOCO NO')
+        };
+
+        for (let i = headerIndex + 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            const cols = parseCSVLine(line);
+            if (cols.length < headers.length - 10) continue; // Basic length check
+
+            // Ensure we have a Loco No, otherwise this row can't be matched to RTIS
+            const loco = (colMap.loco !== -1 && cols[colMap.loco]) ? cols[colMap.loco].trim() : "";
+            
+            // Filter: Ignore rows without a Loco Number
+            if (!loco || loco === "-" || loco === "") continue;
+
+            data.push({
+                CREW_ID: (colMap.crewId !== -1) ? cols[colMap.crewId] : "",
+                NAME: (colMap.name !== -1) ? cols[colMap.name] : "",
+                DESIG: (colMap.desig !== -1) ? cols[colMap.desig] : "",
+                DEPARTURE: (colMap.dep !== -1) ? cols[colMap.dep] : "",
+                ARRIVAL: (colMap.arr !== -1) ? cols[colMap.arr] : "",
+                DUTY_TYPE: (colMap.duty !== -1) ? cols[colMap.duty].toUpperCase() : "",
+                TRAIN_NO: (colMap.train !== -1) ? cols[colMap.train] : "",
+                LOCO_NO: loco
+            });
+        }
+        console.log(`Parsed ${data.length} valid crew rows from CMS Report.`);
+        return data;
+    }
+
+    function parseCrewCSVLegacy(lines) {
+        // Fallback for previous formats
+        const data = [];
         let headerIndex = -1; let headers = [];
         for (let i = 0; i < Math.min(10, lines.length); i++) {
             const cols = parseCSVLine(lines[i]); const lower = cols.map(c => c.toLowerCase());
             if (lower.some(c => c.includes('crew id') || c.includes('lp id')) && lower.some(c => c.includes('loco'))) { headerIndex = i; headers = cols; break; }
         }
-        if (headerIndex === -1) { // Fallback
+        
+        if (headerIndex === -1) {
+            // Last resort: blind column scanning
             for (let i = 2; i < lines.length; i++) {
                 const line = lines[i].trim(); if (!line) continue;
                 const cols = parseCSVLine(line); if (cols.length < 15) continue;
@@ -453,6 +520,7 @@
             }
             return data;
         }
+
         const lowerH = headers.map(h => h.toLowerCase().trim());
         const idx = {
             crewId: lowerH.findIndex(h => h.includes('crew id') || h.includes('lp id')),
@@ -468,7 +536,7 @@
             const line = lines[i].trim(); if (!line) continue;
             const cols = parseCSVLine(line);
             const dutyType = idx.duty >= 0 ? (cols[idx.duty] || "").trim().toUpperCase() : "";
-            if (!dutyType.includes('WR') && !dutyType.includes('CP')) continue;
+            // if (!dutyType.includes('WR') && !dutyType.includes('CP')) continue; // Looser check for legacy
             data.push({
                 CREW_ID: cols[idx.crewId] || "", NAME: cols[idx.name] || "",
                 DESIG: cols[idx.desig] || "", DEPARTURE: cols[idx.dep] || "",
@@ -516,7 +584,12 @@
         } else if (lowerText.includes('station') && lowerText.includes('dirn')) {
             rawData.fsd = parseStandardCSV(text, 'fsd'); updateStatus('fsd', true);
         } else {
-            rawData.crew = parseCrewCSV(text); updateStatus('crew', true, rawData.crew ? rawData.crew.length : 0);
+            // Assume any other file with Crew ID/Name/Desig is Crew Data
+            const crewData = parseCrewCSV(text);
+            if(crewData && crewData.length > 0) {
+                rawData.crew = crewData;
+                updateStatus('crew', true, rawData.crew.length);
+            }
         }
         if (rawData.rtis && rawData.snt && rawData.fsd) document.getElementById('runBtn').disabled = false;
     }
@@ -564,27 +637,46 @@
         const signalTime = signalDateObj.getTime();
         const cleanRTIS = (locoNumber || "").replace(/\D/g, '').trim();
         if (!cleanRTIS) return { id: "NF", name: "-", train: "-", type: "-" };
+        
         for (let row of rawData.crew) {
             const cleanCrew = (row.LOCO_NO || "").replace(/\D/g, '').trim();
             if (!cleanCrew) continue;
+            
+            // Match logic: exact match or contained (handling potential 30106 vs WAG9-30106)
             const matchLoco = cleanCrew === cleanRTIS || (cleanCrew.length >= 4 && (cleanCrew.endsWith(cleanRTIS) || cleanRTIS.endsWith(cleanCrew)));
             if (!matchLoco) continue;
-            const dept = parseIndianDateTime(row.DEPARTURE); const arr = parseIndianDateTime(row.ARRIVAL);
+            
+            const dept = parseIndianDateTime(row.DEPARTURE); 
+            const arr = parseIndianDateTime(row.ARRIVAL);
+            
             if (!dept || !arr) continue;
+            
+            // Time window check: Signal time must be between Crew SignOn(Departure) and SignOff(Arrival)
+            // Adding a small buffer (e.g., 30 mins) can sometimes help with minor discrepancies, but sticking to strict for now.
             if (signalTime >= dept.getTime() && signalTime <= arr.getTime()) {
                 let trainType = "Goods";
                 const tn = (row.TRAIN_NO||"").replace(/\s/g,'');
                 const desig = (row.DESIG||"").toUpperCase();
+                // Heuristic for Train Type
                 if (/^\d+$/.test(tn) || desig.includes('PASS') || desig === 'LPP' || desig === 'LPM') trainType = "Coaching";
                 return { id: row.CREW_ID, name: row.NAME, train: row.TRAIN_NO, type: trainType };
             }
         }
         return { id: "NF", name: "-", train: "-", type: "-" };
     }
+    
+    // Updated date parser for "16-12-2025 13:50" format found in CMS Report
     function parseIndianDateTime(str) {
-        if (!str) return null;
-        const p = str.trim().split(' '); if (p.length < 2) return null;
-        const d = p[0].split(/[-/]/); const t = (p[1]||"00:00:00").split(':');
+        if (!str || str === "-") return null;
+        const p = str.trim().split(' '); 
+        if (p.length < 2) return null;
+        // Expecting DD-MM-YYYY HH:MM or similar
+        const d = p[0].split(/[-/]/); 
+        const t = (p[1]||"00:00:00").split(':');
+        
+        if (d.length < 3) return null;
+        
+        // d[0]=Day, d[1]=Month, d[2]=Year
         return new Date(d[2], d[1]-1, d[0], t[0], t[1], t[2]||0);
     }
 
@@ -708,4 +800,3 @@
 </script>
 </body>
 </html>
-
