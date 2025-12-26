@@ -185,7 +185,7 @@
         </div>
         <div class="section">
             <label>3. Upload Train Log (Data)</label>
-            <input type="file" id="logUpload" accept=".xlsx, .xls" />
+            <input type="file" id="logUpload" accept=".xlsx, .xls, .csv" />
         </div>
 
         <div class="section" id="stationSelectDiv" style="display:none;">
@@ -709,6 +709,15 @@
             if (keys.includes('speed') && (keys.includes('latitude') || keys.includes('lat'))) {
                 foundType = "Train Log";
                 globalTrainData = data;
+                
+                // --- NEW CODE: Round Off Speed in Bulk Upload ---
+                globalTrainData.forEach(row => {
+                    if (row['Speed'] !== undefined && row['Speed'] !== null) {
+                        row['Speed'] = Math.round(parseFloat(row['Speed']));
+                    }
+                });
+                // -----------------------------------------------
+
                 populateStationDropdowns(globalTrainData);
                 document.getElementById('status').innerText = "✅ Train Log Detected via Bulk Upload";
             }
@@ -816,7 +825,17 @@
                 var wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
                 // RAW TRUE IMPORTANT FOR TIME FIX
                 globalTrainData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: true });
-                if(globalTrainData.length > 0) populateStationDropdowns(globalTrainData);
+                
+                // --- NEW CODE: Round Off Speed Column ---
+                if(globalTrainData.length > 0) {
+                    globalTrainData.forEach(row => {
+                        if (row['Speed'] !== undefined && row['Speed'] !== null) {
+                            row['Speed'] = Math.round(parseFloat(row['Speed']));
+                        }
+                    });
+                    populateStationDropdowns(globalTrainData);
+                }
+                // ----------------------------------------
             };
             reader.readAsArrayBuffer(file);
         });
