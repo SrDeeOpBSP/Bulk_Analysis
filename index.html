@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulk Signal Analysis Dashboard (CMS Compatible)</title>
+    <title>Bulk Signal Analysis Dashboard</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
@@ -18,6 +18,8 @@
             --success-bg: #f0fdf4;
             --success-text: #16a34a;
             --table-head-bg: #f8fafc;
+            --vb-orange: #ff671f; /* Saffron color for Vande Bharat */
+            --vb-grey: #475569;
         }
 
         * { box-sizing: border-box; }
@@ -45,7 +47,20 @@
             margin-bottom: 10px;
         }
 
-        h1 { margin: 0; font-size: 1.2rem; color: var(--primary-bg); }
+        .title-group {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        /* SVG Styling */
+        .vb-icon {
+            height: 45px;
+            width: auto;
+            filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.1));
+        }
+
+        h1 { margin: 0; font-size: 1.3rem; color: var(--primary-bg); font-weight: 800; letter-spacing: -0.5px; }
 
         .header-controls {
             display: flex;
@@ -91,6 +106,35 @@
             background: var(--header-bg); border-radius: 8px; padding: 15px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 15px; overflow-y: auto;
         }
+
+        /* Branding Section */
+        .branding-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 5px;
+        }
+        .railway-logo {
+            width: 80px;
+            height: auto;
+            margin-bottom: 8px;
+        }
+        .brand-secr {
+            font-size: 1.4rem;
+            font-weight: 900;
+            color: #1e3a8a; /* Dark Blue */
+            margin-bottom: 2px;
+        }
+        .brand-sub {
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: var(--text-light);
+            line-height: 1.2;
+        }
+
         .drop-zone {
             border: 2px dashed #cbd5e1; border-radius: 8px; padding: 20px 10px; text-align: center; background: #f8fafc; cursor: pointer;
         }
@@ -153,9 +197,13 @@
         .lp-header { background-color: #eff6ff !important; color: #1e3a8a !important; }
 
         #loading {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); z-index: 1000;
-            display: none; justify-content: center; align-items: center; font-size: 1.5rem; color: var(--accent-color); font-weight: bold;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.95); z-index: 1000;
+            display: none; flex-direction: column; justify-content: center; align-items: center; font-size: 1.5rem; color: var(--accent-color); font-weight: bold;
         }
+        #loading svg { height: 80px; width: auto; margin-bottom: 15px; animation: pulse 1.5s infinite; }
+        
+        @keyframes pulse { 0% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(0,0,0,0)); } 50% { transform: scale(1.1); filter: drop-shadow(0 5px 15px rgba(255, 103, 31, 0.4)); } 100% { transform: scale(1); } }
+
         input[type="file"] { display: none; }
         .download-btn { margin-left: auto; background: #10b981; color: white; text-decoration: none; padding: 5px 15px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
         #filter-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 99; display: none; }
@@ -166,7 +214,21 @@
     <div id="filter-overlay"></div>
 
     <div class="dashboard-header">
-        <h1>🚂 BULK SIGNAL ANALYSIS (Bidirectional Time Fix)</h1>
+        <div class="title-group">
+            <svg class="vb-icon" viewBox="0 0 160 60" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10 50 L150 50 L140 58 L20 58 Z" fill="#000000" opacity="0.15"/>
+                
+                <path d="M10 50 L140 50 C155 50 160 40 160 25 C160 10 140 5 120 5 L10 5 C5 5 0 10 0 15 L0 45 C0 50 5 50 10 50 Z" fill="#f8fafc"/>
+                
+                <path d="M120 5 L145 10 C155 15 160 25 160 25 C160 25 155 45 140 50 L120 50 Z" fill="#e2e8f0"/>
+
+                <path d="M0 35 L135 35 C145 35 152 40 155 45 L158 48 C158 48 150 50 140 50 L0 50 Z" fill="#ff671f"/>
+                
+                <path d="M10 12 L110 12 L110 25 L10 25 Z" fill="#1e293b"/> <path d="M115 12 L135 15 C145 18 150 25 150 25 L125 25 L115 12 Z" fill="#1e293b"/> <rect x="25" y="12" width="1" height="38" fill="#cbd5e1"/>
+                <rect x="95" y="12" width="1" height="38" fill="#cbd5e1"/>
+            </svg>
+            <h1>BULK SIGNAL ANALYSIS</h1>
+        </div>
         <div class="header-controls">
             <div id="results-area" style="display:none;">
                 <div class="summary-bar">
@@ -183,6 +245,12 @@
 
     <div class="workspace">
         <div class="sidebar">
+            <div class="branding-section">
+                <img src="railway logo.png" alt="Indian Railways" class="railway-logo" onerror="this.style.display='none'; this.parentElement.insertAdjacentHTML('afterbegin', '<div style=\'font-size:40px;margin-bottom:10px\'>🚂</div>')">
+                <div class="brand-secr">SECR</div>
+                <div class="brand-sub">(Designed and Developed by ELECTRIC/OP/BSP)</div>
+            </div>
+
             <div class="drop-zone" id="main-drop-zone">
                 <h3>📂 Upload Files</h3>
                 <p>Drag RTIS, FSD, SNT, CMS(Crew) here</p>
@@ -251,7 +319,16 @@
         </div>
     </div>
 
-    <div id="loading">Processing Data... 🚂</div>
+    <div id="loading">
+        <svg viewBox="0 0 160 60" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10 50 L140 50 C155 50 160 40 160 25 C160 10 140 5 120 5 L10 5 C5 5 0 10 0 15 L0 45 C0 50 5 50 10 50 Z" fill="#f8fafc"/>
+            <path d="M120 5 L145 10 C155 15 160 25 160 25 C160 25 155 45 140 50 L120 50 Z" fill="#e2e8f0"/>
+            <path d="M0 35 L135 35 C145 35 152 40 155 45 L158 48 C158 48 150 50 140 50 L0 50 Z" fill="#ff671f"/>
+            <path d="M10 12 L110 12 L110 25 L10 25 Z" fill="#1e293b"/>
+            <path d="M115 12 L135 15 C145 18 150 25 150 25 L125 25 L115 12 Z" fill="#1e293b"/>
+        </svg>
+        <div>Processing Data...</div>
+    </div>
 
 <script>
     // --- UI UPDATES ---
@@ -536,7 +613,6 @@
             const line = lines[i].trim(); if (!line) continue;
             const cols = parseCSVLine(line);
             const dutyType = idx.duty >= 0 ? (cols[idx.duty] || "").trim().toUpperCase() : "";
-            // if (!dutyType.includes('WR') && !dutyType.includes('CP')) continue; // Looser check for legacy
             data.push({
                 CREW_ID: cols[idx.crewId] || "", NAME: cols[idx.name] || "",
                 DESIG: cols[idx.desig] || "", DEPARTURE: cols[idx.dep] || "",
@@ -652,7 +728,6 @@
             if (!dept || !arr) continue;
             
             // Time window check: Signal time must be between Crew SignOn(Departure) and SignOff(Arrival)
-            // Adding a small buffer (e.g., 30 mins) can sometimes help with minor discrepancies, but sticking to strict for now.
             if (signalTime >= dept.getTime() && signalTime <= arr.getTime()) {
                 let trainType = "Goods";
                 const tn = (row.TRAIN_NO||"").replace(/\s/g,'');
@@ -665,18 +740,14 @@
         return { id: "NF", name: "-", train: "-", type: "-" };
     }
     
-    // Updated date parser for "16-12-2025 13:50" format found in CMS Report
     function parseIndianDateTime(str) {
         if (!str || str === "-") return null;
         const p = str.trim().split(' '); 
         if (p.length < 2) return null;
-        // Expecting DD-MM-YYYY HH:MM or similar
         const d = p[0].split(/[-/]/); 
         const t = (p[1]||"00:00:00").split(':');
         
         if (d.length < 3) return null;
-        
-        // d[0]=Day, d[1]=Month, d[2]=Year
         return new Date(d[2], d[1]-1, d[0], t[0], t[1], t[2]||0);
     }
 
