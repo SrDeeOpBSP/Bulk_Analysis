@@ -756,7 +756,7 @@
         setTimeout(runAnalysis, 100);
     });
 
-    // --- MAIN ANALYSIS (Bidirectional Time Fix) ---
+    // --- MAIN ANALYSIS (With Duplicate Signal Time Removal) ---
     function runAnalysis() {
         const timeWindowSec = parseInt(document.getElementById('timeWindow').value);
         const speedLimit = parseInt(document.getElementById('speedLimit').value);
@@ -774,6 +774,7 @@
             else if (rawDir === 'DN MIDDLE LINE') dirKey = 'DN_MID';
             else if (['UP OUTER LINE', 'UP FOURTH LINE', 'UP JOINT LINE'].includes(rawDir)) dirKey = 'UMOJT';
             else if (rawDir === 'DN JOINT LINE') dirKey = 'DMOJT';
+            
             const lat = parseFloat(row['Latitude']); const lon = parseFloat(row['Longitude']);
             if (stn && dirKey && !isNaN(lat)) {
                 if (!stationMap[stn]) stationMap[stn] = {};
@@ -781,7 +782,7 @@
             }
         });
 
-        // 2. Helper
+        // 2. Helper for Signal Direction
         function getSignalDirection(txt) {
             const umojtList = ['UMOT HOME', 'UMOJT HOME', 'UMOJT', 'UP OUTER HOME', 'UP JONT', 'UP JOINT HOME', 'UP OUTER', 'UP JOINT', 'UP OUETR', 'UP OUTER JOINT'];
             if (umojtList.some(k => txt.includes(k))) return 'UMOJT';
@@ -801,23 +802,29 @@
             let dir = getSignalDirection(txt);
             let rawTimeStr = row['OCCURED TIME'] || row['TIMEDETAILS'] || row['Time Detail'] || "";
             let timeEntries = rawTimeStr.split(',').map(t => t.trim()).filter(t => t !== "");
+            
             if (!dir || timeEntries.length === 0) return [];
             return timeEntries.map(timeStr => {
-                return { station: stn, dir: dir, time: parseUniversalDate(timeStr) };
+                const tObj = parseUniversalDate(timeStr);
+                // Create a unique ID for this signal event
+                const sigId = tObj ? `${stn}_${dir}_${tObj.getTime()}` : null;
+                return { station: stn, dir: dir, time: tObj, id: sigId };
             });
         }).filter(s => s.time && s.dir && !isNaN(s.time.getTime()));
 
-        let results = [];
+        // --- NEW LOGIC: PRE-PROCESSING TO FIND BEST MATCH ---
         
-        // 4. Match
-        rawData.rtis.forEach(train => {
+        let processedRTIS = []; // Store Valid RTIS rows temporarily
+        let signalClaims = {};  // Map to store which RTIS row claimed which Signal ID { signalID: { rtisIndex, diff } }
+
+        rawData.rtis.forEach((train, index) => {
             const stn = (train['Station']||"").trim();
             const lat = parseFloat(train['Lattitude'] || train['Latitude']);
             const lon = parseFloat(train['Longitude']);
             const speed = parseFloat(train['Speed']);
             const time = parseUniversalDate(train['Event Time']);
             const loco = train['Loco No.'] || "";
-            
+
             if (!stn || isNaN(lat) || !time) return;
             const stationLocs = stationMap[stn]; if (!stationLocs) return; 
 
@@ -829,37 +836,106 @@
 
             if (minDistance > maxErrorDist || !closestDir) return;
 
-            // --- FIX IS HERE: BIDIRECTIONAL TIME WINDOW ---
-            const tStart = time.getTime() - (timeWindowSec * 1000); // Look Backward
-            const tEnd = time.getTime() + (timeWindowSec * 1000);   // Look Forward
+            // Prepare time window
+            const tStart = time.getTime() - (timeWindowSec * 1000);
+            const tEnd = time.getTime() + (timeWindowSec * 1000);
             
             let searchDirs = [];
             if (['UP', 'UP_MID', 'UMOJT'].includes(closestDir)) searchDirs = ['UP', 'UP_MID', 'UMOJT']; 
             else searchDirs = ['DN', 'DN_MID', 'DMOJT'];
 
-            let possibleMatches = signals.filter(s => 
+            // Find potential signals
+            let matches = signals.filter(s => 
                 s.station === stn && searchDirs.includes(s.dir) && 
                 s.time.getTime() >= tStart && s.time.getTime() <= tEnd
             );
 
-            let match = possibleMatches.find(s => s.dir === closestDir);
-            if (!match && possibleMatches.length > 0) match = possibleMatches[0];
+            // If match found, we need to register a claim
+            let bestSignalForThisRow = null;
 
-            let aspect = "Clear"; let conclusion = "Clear"; let sigTimeStr = "-"; let sigTimeObj = null;
+            if (matches.length > 0) {
+                // Determine the best signal for THIS row first (based on Direction match)
+                let exactDirMatch = matches.find(s => s.dir === closestDir);
+                bestSignalForThisRow = exactDirMatch || matches[0];
 
-            if (match) {
-                aspect = "Single Yellow"; 
-                sigTimeStr = match.time.toLocaleTimeString(); sigTimeObj = match.time;
-                if (speed > speedLimit) conclusion = "VIOLATION"; else conclusion = "Complied";
-            } 
+                // Calculate time difference
+                const diff = Math.abs(time.getTime() - bestSignalForThisRow.time.getTime());
+                const sigID = bestSignalForThisRow.id;
 
-            const crew = findCrewDetails(loco, sigTimeObj || time);
+                // --- CRITICAL CHANGE: Check if this signal is already claimed by a closer RTIS row ---
+                if (!signalClaims[sigID]) {
+                    // No one claimed it yet, I take it
+                    signalClaims[sigID] = { rtisIndex: index, diff: diff, signalObj: bestSignalForThisRow };
+                } else {
+                    // Someone claimed it. Is my time difference smaller?
+                    if (diff < signalClaims[sigID].diff) {
+                        // I am closer! I take the signal. Previous guy loses it.
+                        signalClaims[sigID] = { rtisIndex: index, diff: diff, signalObj: bestSignalForThisRow };
+                    }
+                    // Else: I am farther away. I assume "Clear" (handled in next step)
+                }
+            }
+
+            // Store basic info for final render
+            processedRTIS.push({
+                index: index, // Original index to link back if needed
+                train: train,
+                loco: loco,
+                stn: stn,
+                time: time,
+                speed: speed,
+                closestDir: closestDir,
+                minDistance: minDistance
+            });
+        });
+
+        // --- FINAL RESULT GENERATION ---
+        
+        // Reverse lookup: Create a map of "Winner RTIS Indices"
+        // Key: rtisIndex, Value: SignalObject
+        let winnerMap = {};
+        Object.values(signalClaims).forEach(claim => {
+            winnerMap[claim.rtisIndex] = claim.signalObj;
+        });
+
+        let results = [];
+
+        processedRTIS.forEach(item => {
+            let aspect = "Clear"; 
+            let conclusion = "Clear"; 
+            let sigTimeStr = "-"; 
+            let sigTimeObj = null;
+            let finalDir = item.closestDir;
+
+            // Check if this RTIS row is a "Winner" of a signal
+            if (winnerMap[item.index]) {
+                const sig = winnerMap[item.index];
+                aspect = "Single Yellow";
+                sigTimeStr = sig.time.toLocaleTimeString();
+                sigTimeObj = sig.time;
+                finalDir = sig.dir; // Use the signal's direction
+
+                if (item.speed > speedLimit) conclusion = "VIOLATION"; 
+                else conclusion = "Complied";
+            }
+
+            const crew = findCrewDetails(item.loco, sigTimeObj || item.time);
+            
             results.push({
-                Device_ID: train['Device Id']||"", Loco_No: loco, Station: stn,
-                RTIS_Time: time.toLocaleTimeString(), Signal_Time: sigTimeStr,
-                Speed: speed, Direction: match ? match.dir : closestDir, 
-                Aspect: aspect, Conclusion: conclusion, Error_Distance_KM: minDistance,
-                LP_ID: crew.id, LP_Name: crew.name, Train_No: crew.train, Train_Type: crew.type
+                Device_ID: item.train['Device Id']||"", 
+                Loco_No: item.loco, 
+                Station: item.stn,
+                RTIS_Time: item.time.toLocaleTimeString(), 
+                Signal_Time: sigTimeStr,
+                Speed: item.speed, 
+                Direction: finalDir, 
+                Aspect: aspect, 
+                Conclusion: conclusion, 
+                Error_Distance_KM: item.minDistance,
+                LP_ID: crew.id, 
+                LP_Name: crew.name, 
+                Train_No: crew.train, 
+                Train_Type: crew.type
             });
         });
 
