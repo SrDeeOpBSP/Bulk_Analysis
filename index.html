@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bulk Signal Analysis Dashboard</title>
+    
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚂</text></svg>">
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
@@ -18,7 +21,7 @@
             --success-bg: #f0fdf4;
             --success-text: #16a34a;
             --table-head-bg: #f8fafc;
-            --vb-orange: #ff671f; /* Saffron color for Vande Bharat */
+            --vb-orange: #ff671f;
             --vb-grey: #475569;
         }
 
@@ -61,6 +64,19 @@
         }
 
         h1 { margin: 0; font-size: 1.3rem; color: var(--primary-bg); font-weight: 800; letter-spacing: -0.5px; }
+
+        /* Date Display Styling */
+        .date-display {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #1e3a8a;
+            background: #eff6ff;
+            padding: 5px 15px;
+            border-radius: 20px;
+            border: 1px solid #bfdbfe;
+            display: none;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+        }
 
         .header-controls {
             display: flex;
@@ -107,7 +123,7 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 15px; overflow-y: auto;
         }
 
-        /* Branding Section */
+        /* Branding Section - SECRET CLICKABLE AREA */
         .branding-section {
             display: flex;
             flex-direction: column;
@@ -116,7 +132,12 @@
             padding-bottom: 15px;
             border-bottom: 1px solid var(--border-color);
             margin-bottom: 5px;
+            cursor: default; /* Secret: No hand cursor */
+            user-select: none;
         }
+        
+        .branding-section:active { transform: none; } /* Secret: No click effect */
+
         .railway-logo {
             width: 80px;
             height: auto;
@@ -125,7 +146,7 @@
         .brand-secr {
             font-size: 1.4rem;
             font-weight: 900;
-            color: #1e3a8a; /* Dark Blue */
+            color: #1e3a8a;
             margin-bottom: 2px;
         }
         .brand-sub {
@@ -217,18 +238,17 @@
         <div class="title-group">
             <svg class="vb-icon" viewBox="0 0 160 60" xmlns="http://www.w3.org/2000/svg">
                 <path d="M10 50 L150 50 L140 58 L20 58 Z" fill="#000000" opacity="0.15"/>
-                
                 <path d="M10 50 L140 50 C155 50 160 40 160 25 C160 10 140 5 120 5 L10 5 C5 5 0 10 0 15 L0 45 C0 50 5 50 10 50 Z" fill="#f8fafc"/>
-                
                 <path d="M120 5 L145 10 C155 15 160 25 160 25 C160 25 155 45 140 50 L120 50 Z" fill="#e2e8f0"/>
-
                 <path d="M0 35 L135 35 C145 35 152 40 155 45 L158 48 C158 48 150 50 140 50 L0 50 Z" fill="#ff671f"/>
-                
                 <path d="M10 12 L110 12 L110 25 L10 25 Z" fill="#1e293b"/> <path d="M115 12 L135 15 C145 18 150 25 150 25 L125 25 L115 12 Z" fill="#1e293b"/> <rect x="25" y="12" width="1" height="38" fill="#cbd5e1"/>
                 <rect x="95" y="12" width="1" height="38" fill="#cbd5e1"/>
             </svg>
             <h1>BULK SIGNAL ANALYSIS</h1>
         </div>
+
+        <div id="analysis-date-display" class="date-display"></div>
+
         <div class="header-controls">
             <div id="results-area" style="display:none;">
                 <div class="summary-bar">
@@ -245,7 +265,7 @@
 
     <div class="workspace">
         <div class="sidebar">
-            <div class="branding-section">
+            <div class="branding-section" onclick="sendToGoogleSheet()">
                 <img src="railway logo.png" alt="Indian Railways" class="railway-logo" onerror="this.style.display='none'; this.parentElement.insertAdjacentHTML('afterbegin', '<div style=\'font-size:40px;margin-bottom:10px\'>🚂</div>')">
                 <div class="brand-secr">SECR</div>
                 <div class="brand-sub">(Designed and Developed by ELECTRIC/OP/BSP)</div>
@@ -509,7 +529,7 @@
         return data;
     }
 
-    // --- REVISED CREW PARSER (CMS REPORT FORMAT) ---
+    // --- REVISED CREW PARSER ---
     function parseCrewCSV(text) {
         let lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
         const data = [];
@@ -519,19 +539,16 @@
         let headerIndex = -1;
         for (let i = 0; i < Math.min(20, lines.length); i++) {
             const line = lines[i].toLowerCase();
-            // Matching key columns from the CMS report structure
             if (line.includes('crew id') && line.includes('train no') && line.includes('loco no')) {
                 headerIndex = i;
                 break;
             }
         }
 
-        // --- BACKWARD COMPATIBILITY (If CMS Header not found) ---
         if (headerIndex === -1) {
             return parseCrewCSVLegacy(lines);
         }
 
-        // --- CMS REPORT PARSING ---
         const headers = parseCSVLine(lines[headerIndex]).map(h => h.toUpperCase().trim());
         const colMap = {
             crewId: headers.indexOf('CREW ID'),
@@ -547,14 +564,9 @@
         for (let i = headerIndex + 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
-            
             const cols = parseCSVLine(line);
-            if (cols.length < headers.length - 10) continue; // Basic length check
-
-            // Ensure we have a Loco No, otherwise this row can't be matched to RTIS
+            if (cols.length < headers.length - 10) continue; 
             const loco = (colMap.loco !== -1 && cols[colMap.loco]) ? cols[colMap.loco].trim() : "";
-            
-            // Filter: Ignore rows without a Loco Number
             if (!loco || loco === "-" || loco === "") continue;
 
             data.push({
@@ -568,12 +580,10 @@
                 LOCO_NO: loco
             });
         }
-        console.log(`Parsed ${data.length} valid crew rows from CMS Report.`);
         return data;
     }
 
     function parseCrewCSVLegacy(lines) {
-        // Fallback for previous formats
         const data = [];
         let headerIndex = -1; let headers = [];
         for (let i = 0; i < Math.min(10, lines.length); i++) {
@@ -582,7 +592,6 @@
         }
         
         if (headerIndex === -1) {
-            // Last resort: blind column scanning
             for (let i = 2; i < lines.length; i++) {
                 const line = lines[i].trim(); if (!line) continue;
                 const cols = parseCSVLine(line); if (cols.length < 15) continue;
@@ -656,11 +665,12 @@
         if (lowerText.includes('loco no.') && lowerText.includes('event time')) {
             rawData.rtis = parseStandardCSV(text, 'rtis'); updateStatus('rtis', true);
         } else if ((lowerText.includes('faultlevel') || lowerText.includes('fault message')) && lowerText.includes('station')) {
-            rawData.snt = parseStandardCSV(text, 'snt'); updateStatus('snt', true);
+            rawData.snt = parseStandardCSV(text, 'snt'); 
+            updateStatus('snt', true);
+            extractAndDisplayDate(text);
         } else if (lowerText.includes('station') && lowerText.includes('dirn')) {
             rawData.fsd = parseStandardCSV(text, 'fsd'); updateStatus('fsd', true);
         } else {
-            // Assume any other file with Crew ID/Name/Desig is Crew Data
             const crewData = parseCrewCSV(text);
             if(crewData && crewData.length > 0) {
                 rawData.crew = crewData;
@@ -717,8 +727,6 @@
         for (let row of rawData.crew) {
             const cleanCrew = (row.LOCO_NO || "").replace(/\D/g, '').trim();
             if (!cleanCrew) continue;
-            
-            // Match logic: exact match or contained (handling potential 30106 vs WAG9-30106)
             const matchLoco = cleanCrew === cleanRTIS || (cleanCrew.length >= 4 && (cleanCrew.endsWith(cleanRTIS) || cleanRTIS.endsWith(cleanCrew)));
             if (!matchLoco) continue;
             
@@ -727,12 +735,10 @@
             
             if (!dept || !arr) continue;
             
-            // Time window check: Signal time must be between Crew SignOn(Departure) and SignOff(Arrival)
             if (signalTime >= dept.getTime() && signalTime <= arr.getTime()) {
                 let trainType = "Goods";
                 const tn = (row.TRAIN_NO||"").replace(/\s/g,'');
                 const desig = (row.DESIG||"").toUpperCase();
-                // Heuristic for Train Type
                 if (/^\d+$/.test(tn) || desig.includes('PASS') || desig === 'LPP' || desig === 'LPM') trainType = "Coaching";
                 return { id: row.CREW_ID, name: row.NAME, train: row.TRAIN_NO, type: trainType };
             }
@@ -756,14 +762,13 @@
         setTimeout(runAnalysis, 100);
     });
 
-    // --- MAIN ANALYSIS (With Duplicate Signal Time Removal) ---
+   // --- MAIN ANALYSIS ---
     function runAnalysis() {
         const timeWindowSec = parseInt(document.getElementById('timeWindow').value);
         const speedLimit = parseInt(document.getElementById('speedLimit').value);
         const maxErrorDist = parseFloat(document.getElementById('errorDistSlider').value);
         const stationMap = {};
 
-        // 1. Process FSD
         rawData.fsd.forEach(row => {
             const stn = row['Station'] ? row['Station'].trim() : "";
             const rawDir = (row['DIRN']||"").toUpperCase().trim();
@@ -782,7 +787,6 @@
             }
         });
 
-        // 2. Helper for Signal Direction
         function getSignalDirection(txt) {
             const umojtList = ['UMOT HOME', 'UMOJT HOME', 'UMOJT', 'UP OUTER HOME', 'UP JONT', 'UP JOINT HOME', 'UP OUTER', 'UP JOINT', 'UP OUETR', 'UP OUTER JOINT'];
             if (umojtList.some(k => txt.includes(k))) return 'UMOJT';
@@ -795,7 +799,6 @@
             return null;
         }
 
-        // 3. Process Signals
         const signals = rawData.snt.flatMap(row => {
             let stn = (row['STATION']||"").split(/[-_\s]/)[0].trim();
             let txt = ((row['INFORMATION']||"") + " " + (row['FAULT MESSAGE']||"")).toUpperCase();
@@ -806,16 +809,13 @@
             if (!dir || timeEntries.length === 0) return [];
             return timeEntries.map(timeStr => {
                 const tObj = parseUniversalDate(timeStr);
-                // Create a unique ID for this signal event
                 const sigId = tObj ? `${stn}_${dir}_${tObj.getTime()}` : null;
                 return { station: stn, dir: dir, time: tObj, id: sigId };
             });
         }).filter(s => s.time && s.dir && !isNaN(s.time.getTime()));
-
-        // --- NEW LOGIC: PRE-PROCESSING TO FIND BEST MATCH ---
         
-        let processedRTIS = []; // Store Valid RTIS rows temporarily
-        let signalClaims = {};  // Map to store which RTIS row claimed which Signal ID { signalID: { rtisIndex, diff } }
+        let allPotentialMatches = [];
+        let rtisMetaData = {}; 
 
         rawData.rtis.forEach((train, index) => {
             const stn = (train['Station']||"").trim();
@@ -836,7 +836,8 @@
 
             if (minDistance > maxErrorDist || !closestDir) return;
 
-            // Prepare time window
+            rtisMetaData[index] = { train, loco, stn, time, speed, closestDir, minDistance };
+
             const tStart = time.getTime() - (timeWindowSec * 1000);
             const tEnd = time.getTime() + (timeWindowSec * 1000);
             
@@ -844,76 +845,64 @@
             if (['UP', 'UP_MID', 'UMOJT'].includes(closestDir)) searchDirs = ['UP', 'UP_MID', 'UMOJT']; 
             else searchDirs = ['DN', 'DN_MID', 'DMOJT'];
 
-            // Find potential signals
-            let matches = signals.filter(s => 
+            const possibleSignals = signals.filter(s => 
                 s.station === stn && searchDirs.includes(s.dir) && 
                 s.time.getTime() >= tStart && s.time.getTime() <= tEnd
             );
 
-            // If match found, we need to register a claim
-            let bestSignalForThisRow = null;
-
-            if (matches.length > 0) {
-                // Determine the best signal for THIS row first (based on Direction match)
-                let exactDirMatch = matches.find(s => s.dir === closestDir);
-                bestSignalForThisRow = exactDirMatch || matches[0];
-
-                // Calculate time difference
-                const diff = Math.abs(time.getTime() - bestSignalForThisRow.time.getTime());
-                const sigID = bestSignalForThisRow.id;
-
-                // --- CRITICAL CHANGE: Check if this signal is already claimed by a closer RTIS row ---
-                if (!signalClaims[sigID]) {
-                    // No one claimed it yet, I take it
-                    signalClaims[sigID] = { rtisIndex: index, diff: diff, signalObj: bestSignalForThisRow };
-                } else {
-                    // Someone claimed it. Is my time difference smaller?
-                    if (diff < signalClaims[sigID].diff) {
-                        // I am closer! I take the signal. Previous guy loses it.
-                        signalClaims[sigID] = { rtisIndex: index, diff: diff, signalObj: bestSignalForThisRow };
-                    }
-                    // Else: I am farther away. I assume "Clear" (handled in next step)
+            possibleSignals.forEach(sig => {
+                let distToSignalLine = minDistance; 
+                if (stationLocs[sig.dir]) {
+                    distToSignalLine = haversine(lat, lon, stationLocs[sig.dir].lat, stationLocs[sig.dir].lon);
                 }
-            }
-
-            // Store basic info for final render
-            processedRTIS.push({
-                index: index, // Original index to link back if needed
-                train: train,
-                loco: loco,
-                stn: stn,
-                time: time,
-                speed: speed,
-                closestDir: closestDir,
-                minDistance: minDistance
+                
+                allPotentialMatches.push({
+                    rtisIndex: index,
+                    signalId: sig.id,
+                    signalObj: sig,
+                    distance: distToSignalLine,
+                    timeDiff: Math.abs(time.getTime() - sig.time.getTime())
+                });
             });
         });
 
-        // --- FINAL RESULT GENERATION ---
-        
-        // Reverse lookup: Create a map of "Winner RTIS Indices"
-        // Key: rtisIndex, Value: SignalObject
-        let winnerMap = {};
-        Object.values(signalClaims).forEach(claim => {
-            winnerMap[claim.rtisIndex] = claim.signalObj;
+        allPotentialMatches.sort((a, b) => a.distance - b.distance);
+
+        let assignedRTIS = new Set();
+        let assignedSignals = new Set();
+        let finalAssignments = {};
+
+        allPotentialMatches.forEach(match => {
+            if (assignedRTIS.has(match.rtisIndex)) return;
+            if (assignedSignals.has(match.signalId)) return;
+
+            assignedRTIS.add(match.rtisIndex);
+            assignedSignals.add(match.signalId);
+            finalAssignments[match.rtisIndex] = {
+                sig: match.signalObj,
+                dist: match.distance
+            };
         });
 
         let results = [];
-
-        processedRTIS.forEach(item => {
+        Object.keys(rtisMetaData).forEach(idx => {
+            const item = rtisMetaData[idx];
             let aspect = "Clear"; 
             let conclusion = "Clear"; 
             let sigTimeStr = "-"; 
             let sigTimeObj = null;
             let finalDir = item.closestDir;
+            let finalDist = item.minDistance;
 
-            // Check if this RTIS row is a "Winner" of a signal
-            if (winnerMap[item.index]) {
-                const sig = winnerMap[item.index];
+            const assignment = finalAssignments[idx];
+
+            if (assignment) {
+                const sig = assignment.sig;
                 aspect = "Single Yellow";
                 sigTimeStr = sig.time.toLocaleTimeString();
                 sigTimeObj = sig.time;
-                finalDir = sig.dir; // Use the signal's direction
+                finalDir = sig.dir;
+                finalDist = assignment.dist;
 
                 if (item.speed > speedLimit) conclusion = "VIOLATION"; 
                 else conclusion = "Complied";
@@ -923,19 +912,14 @@
             
             results.push({
                 Device_ID: item.train['Device Id']||"", 
-                Loco_No: item.loco, 
-                Station: item.stn,
+                Loco_No: item.loco, Station: item.stn,
                 RTIS_Time: item.time.toLocaleTimeString(), 
                 Signal_Time: sigTimeStr,
-                Speed: item.speed, 
-                Direction: finalDir, 
-                Aspect: aspect, 
-                Conclusion: conclusion, 
-                Error_Distance_KM: item.minDistance,
-                LP_ID: crew.id, 
-                LP_Name: crew.name, 
-                Train_No: crew.train, 
-                Train_Type: crew.type
+                Speed: item.speed, Direction: finalDir, 
+                Aspect: aspect, Conclusion: conclusion, 
+                Error_Distance_KM: finalDist,
+                LP_ID: crew.id, LP_Name: crew.name, 
+                Train_No: crew.train, Train_Type: crew.type
             });
         });
 
@@ -943,6 +927,120 @@
         globalResults = results; activeFilters = {}; renderTable();
         document.getElementById('loading').style.display = 'none';
         document.getElementById('results-area').style.display = 'block';
+    }
+
+    function extractAndDisplayDate(text) {
+        const lines = text.split(/\r?\n/).slice(0, 10);
+        const targetLine = lines.find(line => line.toLowerCase().includes('from') && line.includes(':'));
+        
+        if (targetLine) {
+            const match = targetLine.match(/(\d{1,2})\/([A-Za-z]+)\/(\d{2,4})/);
+            if (match) {
+                let day = match[1].padStart(2, '0');
+                let monthStr = match[2].toLowerCase();
+                let year = match[3];
+                if (year.length === 2) year = "20" + year;
+
+                const months = {
+                    'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
+                    'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+                };
+                
+                const month = months[monthStr.substring(0, 3)]; 
+                if (month) {
+                    const finalDate = `${day}-${month}-${year}`;
+                    const displayDiv = document.getElementById('analysis-date-display');
+                    displayDiv.innerText = "Date of Analysis: " + finalDate;
+                    displayDiv.style.display = "block";
+                }
+            }
+        }
+    }
+
+    // --- SECRET GOOGLE SHEET UPLOAD LOGIC (DUPLICATE PREVENTED) ---
+    
+    // Browser ki memory se purana sent data load karein
+    const sentRegistry = new Set(JSON.parse(localStorage.getItem('sent_railway_data_keys') || '[]'));
+
+    function sendToGoogleSheet() {
+        // 1. Validation (Silent)
+        if (!globalResults || globalResults.length === 0) return;
+
+        // 2. Filter Violation & Complied
+        const potentialData = globalResults.filter(row => 
+            row.Conclusion === 'VIOLATION' || row.Conclusion === 'Complied'
+        );
+
+        if (potentialData.length === 0) return;
+
+        // 3. Date of Analysis extraction
+        let analysisDate = "-";
+        const dateDiv = document.getElementById('analysis-date-display');
+        if (dateDiv && dateDiv.innerText.includes(':')) {
+            analysisDate = dateDiv.innerText.split(':')[1].trim();
+        }
+
+        // 4. Duplicate Check & Format Data
+        const finalPayload = [];
+        let newKeysAdded = false;
+
+        potentialData.forEach(row => {
+            // Unique Key create karein (Date + Loco + RTIS Time + Signal Time)
+            // Isse duplicate pakda jayega
+            const uniqueKey = `${analysisDate}|${row.Loco_No}|${row.RTIS_Time}|${row.Signal_Time}`;
+
+            // Check karein ki kya ye key pehle bheji gayi hai?
+            if (!sentRegistry.has(uniqueKey)) {
+                
+                // Agar nahi bheji hai, toh payload mai add karein
+                finalPayload.push({
+                    Date_Of_Analysis: analysisDate,
+                    Device_ID: row.Device_ID,
+                    Loco_No: row.Loco_No,
+                    Station: row.Station,
+                    RTIS_Time: row.RTIS_Time,
+                    Signal_Time: row.Signal_Time,
+                    Speed: row.Speed,
+                    Direction: row.Direction,
+                    Aspect: row.Aspect,
+                    Conclusion: row.Conclusion,
+                    Error_Distance_KM: row.Error_Distance_KM,
+                    LP_ID: row.LP_ID,
+                    LP_Name: row.LP_Name,
+                    Train_No: row.Train_No,
+                    Train_Type: row.Train_Type
+                });
+
+                // Registry mai mark karein ki ye ab bheja ja raha hai
+                sentRegistry.add(uniqueKey);
+                newKeysAdded = true;
+            }
+        });
+
+        // Agar koi naya data nahi hai, toh yahi ruk jao (Server call mat karo)
+        if (finalPayload.length === 0) {
+            console.log("Duplicate Data Prevented: All records already sent.");
+            return; 
+        }
+
+        // Memory update karein (taaki page refresh hone par bhi yaad rahe)
+        if (newKeysAdded) {
+            localStorage.setItem('sent_railway_data_keys', JSON.stringify([...sentRegistry]));
+        }
+
+        // 5. Silent Upload (Only New Data)
+        const scriptURL = "https://script.google.com/macros/s/AKfycbyXRJ2-C-fTUbsEW_VTn3Ut9Lw26gbC05NXBNDZY3GKRMYmo4P-mAQYCwFcxc5a3HLd/exec";
+
+        fetch(scriptURL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(finalPayload)
+        }).then(() => {
+            console.log("New data synced successfully: " + finalPayload.length + " rows.");
+        }).catch(err => {
+            console.log("Sync error"); 
+        });
     }
 </script>
 </body>
