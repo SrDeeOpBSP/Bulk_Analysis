@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SANKET - QC Mode (Time Fixed)</title>
+    <title>SANKET - QC Mode (Time Fixed + DOJ)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -410,6 +410,10 @@
                 <div class="report-box">
                     <h4>Trip Summary</h4>
                     <table style="width:100%; text-align:left;">
+                        <tr style="background: #e6f7ff;">
+                            <td><b>Date of Journey:</b></td>
+                            <td id="repDateOfJourney" style="font-weight:bold; color:#005580;">-</td>
+                        </tr>
                         <tr><td><b>From Stn:</b></td><td id="repFrom"></td></tr>
                         <tr><td><b>To Stn:</b></td><td id="repTo"></td></tr>
                         <tr><td><b>Total Dist:</b></td><td id="repDist"></td></tr>
@@ -1406,6 +1410,34 @@
 
         function populateAndPrint() {
             var reportDiv = document.getElementById('printableReport'); reportDiv.style.display = 'block'; window.scrollTo(0,0);
+            
+            // --- NEW LOGIC: DATE EXTRACTION ---
+            let journeyDate = "-";
+            if(globalTrainData && globalTrainData.length > 0) {
+                // Try to find a date-like column
+                let firstRow = globalTrainData[0];
+                let rawVal = firstRow['Date'] || firstRow['date'] || firstRow['Time'] || firstRow['Logging Time'] || firstRow['Event Date'];
+
+                if(rawVal) {
+                     if (typeof rawVal === 'number') {
+                        // Excel Serial Date
+                        let d = new Date(Math.round((rawVal - 25569) * 86400 * 1000));
+                        journeyDate = d.toLocaleDateString('en-GB');
+                    } else {
+                        // String Parsing attempt
+                        let d = new Date(rawVal);
+                        if (!isNaN(d.getTime())) {
+                             journeyDate = d.toLocaleDateString('en-GB');
+                        } else {
+                            // Fallback
+                             journeyDate = String(rawVal).split(' ')[0];
+                        }
+                    }
+                }
+            }
+            document.getElementById('repDateOfJourney').innerText = journeyDate;
+            // ----------------------------------
+
             let snapContainer = document.getElementById('mapSnapshotsContainer'); snapContainer.innerHTML = "";
             if(reportSnapshots.length > 0) { let breakDiv = document.createElement('div'); breakDiv.className = 'page-break'; snapContainer.appendChild(breakDiv); }
             for (let i = 0; i < reportSnapshots.length; i += 3) {
